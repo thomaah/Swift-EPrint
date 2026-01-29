@@ -11,6 +11,78 @@
 
 import Foundation
 
+// MARK: - Emoji System
+
+/// Protocol for defining emoji types that can be used with EPrint.
+///
+/// Conform to this protocol to create custom emoji enums for your project.
+/// EPrint provides a standard set via `Emoji.Standard`.
+///
+/// ## Example: Custom Emoji Enum
+/// ```swift
+/// enum MyProjectEmojis: String, EPrintEmoji {
+///     case api = "🌐"
+///     case database = "💾"
+///     case cache = "⚡️"
+///
+///     var emoji: String { rawValue }
+/// }
+///
+/// // Usage
+/// eprint(.api, "Fetching data")  // "🌐 Fetching data"
+/// ```
+public protocol EPrintEmoji {
+    /// The emoji character(s) to display
+    var emoji: String { get }
+}
+
+/// Namespace for standard emoji types
+public enum Emoji {
+    
+    /// Standard emoji set for common debugging scenarios.
+    ///
+    /// These emojis provide visual categorization of debug output:
+    /// - `.start`: Beginning of an operation 🏁
+    /// - `.success`: Successful completion ✅
+    /// - `.error`: Error or failure ❌
+    /// - `.warning`: Warning or caution ⚠️
+    /// - `.info`: Informational message ℹ️
+    /// - `.measurement`: Values, sizes, metrics 📏
+    /// - `.observation`: State observation 👁️
+    /// - `.action`: Action starting 🚀
+    /// - `.inspection`: Deep inspection 🔍
+    /// - `.metrics`: Performance data 📊
+    /// - `.target`: Goals or targets 🎯
+    /// - `.debug`: Debug-specific info 🐛
+    /// - `.complete`: Completion 📦
+    ///
+    /// ## Example Usage
+    /// ```swift
+    /// private let eprint = EPrint.standard
+    ///
+    /// eprint(.start, "Beginning render")      // "🏁 Beginning render"
+    /// eprint(.measurement, "Width: \(width)") // "📏 Width: 800"
+    /// eprint(.success, "Render complete")     // "✅ Render complete"
+    /// ```
+    public enum Standard: String, EPrintEmoji {
+        case start = "🏁"
+        case success = "✅"
+        case error = "❌"
+        case warning = "⚠️"
+        case info = "ℹ️"
+        case measurement = "📏"
+        case observation = "👁️"
+        case action = "🚀"
+        case inspection = "🔍"
+        case metrics = "📊"
+        case target = "🎯"
+        case debug = "🐛"
+        case complete = "📦"
+        
+        public var emoji: String { rawValue }
+    }
+}
+
 /// Enhanced print debugging with emoji support and configurable output.
 ///
 /// EPrint makes debugging output simple, flexible, and powerful. Use it anywhere you'd
@@ -44,6 +116,29 @@ import Foundation
 /// Multiple threads can call the same EPrint instance simultaneously without
 /// data corruption or race conditions.
 public final class EPrint: @unchecked Sendable {
+    
+    // MARK: - Debug Mode
+    
+    /// Controls internal debug output from EPrint itself.
+    ///
+    /// When `true`, EPrint will print its own internal debugging messages
+    /// showing the flow of execution through the library. This is useful for
+    /// debugging EPrint itself, not your application code.
+    ///
+    /// Default: `false`
+    ///
+    /// ## Example
+    /// ```swift
+    /// EPrint.debugMode = true
+    /// eprint("Test")
+    /// // Prints:
+    /// // 🎯 EPrint.callAsFunction called Test
+    /// // 📦 Creating EPrintEntry
+    /// // ✍️ Writing to 1 outputs
+    /// // Test
+    /// // ✅ EPrint write complete
+    /// ```
+    public static var debugMode: Bool = false
     
     // MARK: - Properties
     
@@ -163,6 +258,77 @@ public final class EPrint: @unchecked Sendable {
     
     // MARK: - Main Print Function
     
+    // MARK: - Main Print Functions
+    
+    /// Prints a debug message with a standard emoji prefix and captured metadata.
+    ///
+    /// This overload enables shorthand syntax for standard emojis using type inference.
+    /// When you write `eprint(.start, "message")`, Swift infers `.start` as `Emoji.Standard.start`.
+    ///
+    /// - Parameters:
+    ///   - emoji: A standard emoji (e.g., `.start`, `.success`, `.error`)
+    ///   - message: The debug message to print
+    ///   - file: Source file (automatically captured via #file)
+    ///   - line: Line number (automatically captured via #line)
+    ///   - function: Function name (automatically captured via #function)
+    ///
+    /// ## Example
+    /// ```swift
+    /// eprint(.start, "Beginning render")       // "🏁 Beginning render"
+    /// eprint(.measurement, "Width: \(width)")  // "📏 Width: 800"
+    /// eprint(.success, "Render complete")      // "✅ Render complete"
+    /// ```
+    public func callAsFunction(
+        _ emoji: Emoji.Standard,
+        _ message: String,
+        file: String = #file,
+        line: Int = #line,
+        function: String = #function
+    ) {
+        // Prepend emoji to message with space
+        let emojiMessage = "\(emoji.emoji) \(message)"
+        
+        // Call the main implementation
+        callAsFunction(emojiMessage, file: file, line: line, function: function)
+    }
+    
+    /// Prints a debug message with custom emoji prefix and captured metadata.
+    ///
+    /// This generic overload supports custom emoji enums that conform to `EPrintEmoji`.
+    /// For custom emojis, you may need to be explicit about the type.
+    ///
+    /// - Parameters:
+    ///   - emoji: A custom emoji from your project's emoji enum
+    ///   - message: The debug message to print
+    ///   - file: Source file (automatically captured via #file)
+    ///   - line: Line number (automatically captured via #line)
+    ///   - function: Function name (automatically captured via #function)
+    ///
+    /// ## Example
+    /// ```swift
+    /// enum MyEmojis: String, EPrintEmoji {
+    ///     case api = "🌐"
+    ///     case database = "💾"
+    ///     var emoji: String { rawValue }
+    /// }
+    ///
+    /// eprint(MyEmojis.api, "Fetching data")        // "🌐 Fetching data"
+    /// eprint(MyEmojis.database, "Query complete")  // "💾 Query complete"
+    /// ```
+    public func callAsFunction<E: EPrintEmoji>(
+        _ emoji: E,
+        _ message: String,
+        file: String = #file,
+        line: Int = #line,
+        function: String = #function
+    ) {
+        // Prepend emoji to message with space
+        let emojiMessage = "\(emoji.emoji) \(message)"
+        
+        // Call the main implementation
+        callAsFunction(emojiMessage, file: file, line: line, function: function)
+    }
+    
     /// Prints a debug message with captured metadata.
     ///
     /// This is the core function that captures file, line, function, timestamp, and
@@ -170,6 +336,9 @@ public final class EPrint: @unchecked Sendable {
     ///
     /// The use of `callAsFunction` allows calling EPrint instances like a function:
     /// `eprint("message")` instead of `eprint.print("message")`.
+    ///
+    /// For better visual categorization, consider using the emoji overload:
+    /// `eprint(.start, "message")` instead of `eprint("🏁 message")`.
     ///
     /// - Parameters:
     ///   - message: The debug message to print
@@ -193,13 +362,17 @@ public final class EPrint: @unchecked Sendable {
         // We check this before doing ANY work (even string interpolation happens after this check)
         guard enabled else { return }
         
-        // print("🎯 EPrint.callAsFunction called", message)
+        if EPrint.debugMode {
+            print("🎯 EPrint.callAsFunction called", message)
+        }
         
         // Capture current timestamp and thread info
         let timestamp = Date()
         let thread = captureThreadInfo()
         
-        // print("📦 Creating EPrintEntry")
+        if EPrint.debugMode {
+            print("📦 Creating EPrintEntry")
+        }
         
         // Create the entry with all captured information
         let entry = EPrintEntry(
@@ -213,11 +386,15 @@ public final class EPrint: @unchecked Sendable {
         
         // Write to all outputs (thread-safely)
         queue.async { [configuration] in
-            // print("✍️ Writing to \(configuration.outputs.count) outputs")
+            if EPrint.debugMode {
+                print("✍️ Writing to \(configuration.outputs.count) outputs")
+            }
             for output in configuration.outputs {
                 output.write(entry, config: configuration)
             }
-            // print("✅ EPrint write complete")
+            if EPrint.debugMode {
+                print("✅ EPrint write complete")
+            }
         }
     }
     

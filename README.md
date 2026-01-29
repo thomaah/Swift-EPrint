@@ -63,10 +63,10 @@ Or in Xcode:
 ```swift
 import EPrint
 
-// Use the shared instance for quick debugging
-EPrint.shared("🏁 Starting operation")
-EPrint.shared("📏 Width: \(width), Height: \(height)")
-EPrint.shared("✅ Operation complete")
+// Use the shared instance with type-safe emojis (recommended)
+EPrint.shared(.start, "Starting operation")
+EPrint.shared(.measurement, "Width: \(width), Height: \(height)")
+EPrint.shared(.success, "Operation complete")
 ```
 
 **Output:**
@@ -81,23 +81,135 @@ EPrint.shared("✅ Operation complete")
 import EPrint
 
 // Create a per-file instance at the top of your file
-private let eprint = EPrint()
+private let eprint = EPrint.standard
 
 class PDFRenderer {
     func render(page: Int) {
-        eprint("🏁 Starting render for page \(page)")
+        eprint(.start, "Starting render for page \(page)")
         
         let size = calculateSize()
-        eprint("📏 Calculated size: \(size)")
+        eprint(.measurement, "Calculated size: \(size)")
         
         // ... your code ...
         
-        eprint("✅ Render complete")
+        eprint(.success, "Render complete")
     }
 }
 
 // Toggle debugging for this entire file
 // eprint.enabled = false  // Uncomment to disable
+```
+
+---
+
+## Emoji System 🎨
+
+EPrint provides a type-safe emoji system for visually categorizing debug output. This is the recommended way to use EPrint as it provides compile-time safety and cleaner code.
+
+### Standard Emojis
+
+EPrint includes a standard set of emojis via `Emoji.Standard`:
+
+| Emoji | Case | Usage |
+|-------|------|-------|
+| 🏁 | `.start` | Beginning of an operation |
+| ✅ | `.success` | Successful completion |
+| ❌ | `.error` | Error or failure |
+| ⚠️ | `.warning` | Warning or caution |
+| ℹ️ | `.info` | Informational message |
+| 📏 | `.measurement` | Values, sizes, metrics |
+| 👁️ | `.observation` | State observation |
+| 🚀 | `.action` | Action starting |
+| 🔍 | `.inspection` | Deep inspection |
+| 📊 | `.metrics` | Performance data |
+| 🎯 | `.target` | Goals or targets |
+| 🐛 | `.debug` | Debug-specific info |
+| 📦 | `.complete` | Completion |
+
+### Using Standard Emojis
+
+```swift
+private let eprint = EPrint.standard
+
+func processData() {
+    eprint(.start, "Processing data")
+    eprint(.measurement, "Processing \(count) items")
+    
+    if error {
+        eprint(.error, "Failed to process: \(error)")
+        return
+    }
+    
+    eprint(.success, "Processing complete")
+}
+```
+
+**Output:**
+```
+[DataProcessor.swift:15] 🏁 Processing data
+[DataProcessor.swift:16] 📏 Processing 1000 items
+[DataProcessor.swift:24] ✅ Processing complete
+```
+
+### Creating Custom Emoji Enums
+
+Create your own emoji enums for project-specific categorization:
+
+```swift
+import EPrint
+
+// Define your custom emoji enum
+enum MyProjectEmojis: String, EPrintEmoji {
+    case api = "🌐"
+    case database = "💾"
+    case cache = "⚡️"
+    case network = "📡"
+    case auth = "🔐"
+    
+    var emoji: String { rawValue }
+}
+
+// Use throughout your project
+private let eprint = EPrint.standard
+
+func fetchUser() {
+    eprint(.api, "Fetching user data")          // "🌐 Fetching user data"
+    eprint(.database, "Querying database")      // "💾 Querying database"
+    eprint(.cache, "Cache hit!")                // "⚡️ Cache hit!"
+}
+```
+
+### Mixing Standard and Custom Emojis
+
+You can use both standard and custom emojis in the same file:
+
+```swift
+enum APIEmojis: String, EPrintEmoji {
+    case request = "📤"
+    case response = "📥"
+    var emoji: String { rawValue }
+}
+
+func makeRequest() {
+    eprint(.start, "Making API call")           // Standard: 🏁
+    eprint(.request, "POST /api/users")         // Custom: 📤
+    eprint(.response, "200 OK")                 // Custom: 📥
+    eprint(.success, "Request complete")        // Standard: ✅
+}
+```
+
+### Legacy String Syntax
+
+The old way of manually adding emojis still works:
+
+```swift
+// Still supported
+eprint("🏁 Starting render")
+eprint("📏 Width: \(width)")
+
+// But the new way is recommended
+eprint(.start, "Starting render")
+eprint(.measurement, "Width: \(width)")
 ```
 
 ---
@@ -111,7 +223,7 @@ EPrint comes with three built-in presets for common debugging scenarios:
 #### 1. Minimal (Default) - Message Only
 ```swift
 private let eprint = EPrint.minimal
-eprint("🏁 Starting render")
+eprint(.start, "Starting render")
 ```
 
 **Output:**
@@ -122,7 +234,7 @@ eprint("🏁 Starting render")
 #### 2. Standard - File and Line
 ```swift
 private let eprint = EPrint.standard
-eprint("🏁 Starting render")
+eprint(.start, "Starting render")
 ```
 
 **Output:**
@@ -133,7 +245,7 @@ eprint("🏁 Starting render")
 #### 3. Verbose - Everything
 ```swift
 private let eprint = EPrint.verbose
-eprint("🏁 Starting render")
+eprint(.start, "Starting render")
 ```
 
 **Output:**
@@ -151,7 +263,7 @@ private let eprint = EPrint(
     showLineNumber: true,
     showTimestamp: true
 )
-eprint("🏁 Starting render")
+eprint(.start, "Starting render")
 ```
 
 **Output:**
@@ -172,33 +284,6 @@ eprint.enabled = true
 // Toggle based on conditions
 eprint.enabled = isDebugMode
 eprint.enabled = pageIndex == 5  // Only debug page 5
-```
-
----
-
-## Emoji Conventions 🎨
-
-We recommend using consistent emojis to categorize your debug output:
-```swift
-eprint("🏁 Starting operation")      // Start of operation
-eprint("📏 Size: \(size)")           // Measurements/values
-eprint("👁️ Observed: \(state)")      // State observation
-eprint("🚀 Launching: \(task)")      // Action starting
-eprint("✅ Operation complete")      // Success
-eprint("⚠️ Warning: \(issue)")       // Warning
-eprint("❌ Error: \(error)")         // Error
-eprint("🔍 Inspecting: \(value)")    // Deep inspection
-eprint("📊 Metrics: \(metrics)")     // Performance data
-eprint("🎯 Target: \(target)")       // Goals/targets
-```
-
-This makes scanning debug output much easier:
-```
-🏁 Starting render
-📏 Width: 800, Height: 1200
-👁️ Current zoom: 1.5
-🚀 Rendering page 5
-✅ Render complete
 ```
 
 ---
@@ -274,21 +359,21 @@ private let eprint = EPrint.standard
 
 class PDFRenderer {
     func render(page: Int, zoom: Double) {
-        eprint("🏁 Starting render - page: \(page), zoom: \(zoom)")
+        eprint(.start, "Starting render - page: \(page), zoom: \(zoom)")
         
         let startTime = Date()
         
         guard let document = loadDocument() else {
-            eprint("❌ Failed to load document")
+            eprint(.error, "Failed to load document")
             return
         }
         
-        eprint("📏 Document size: \(document.pageCount) pages")
+        eprint(.measurement, "Document size: \(document.pageCount) pages")
         
         let image = renderPage(page, at: zoom)
         
         let duration = Date().timeIntervalSince(startTime)
-        eprint("✅ Render complete in \(String(format: "%.2f", duration))s")
+        eprint(.success, "Render complete in \(String(format: "%.2f", duration))s")
     }
 }
 ```
@@ -310,13 +395,13 @@ private let eprint = EPrint(
 
 class APIClient {
     func fetchData() async throws -> Data {
-        eprint("🚀 Starting API request")
+        eprint(.action, "Starting API request")
         
         let startTime = Date()
         let data = try await URLSession.shared.data(from: url)
         let duration = Date().timeIntervalSince(startTime)
         
-        eprint("✅ Received \(data.count) bytes in \(String(format: "%.2f", duration))s")
+        eprint(.success, "Received \(data.count) bytes in \(String(format: "%.2f", duration))s")
         return data
     }
 }
@@ -328,13 +413,13 @@ private let eprint = EPrint.verbose
 
 class ScrollViewController: UIViewController {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        eprint("👁️ Scroll offset: \(scrollView.contentOffset.y)")
+        eprint(.observation, "Scroll offset: \(scrollView.contentOffset.y)")
     }
     
     func loadVisibleCells() {
-        eprint("🔍 Loading cells for visible range")
+        eprint(.inspection, "Loading cells for visible range")
         // ... loading logic ...
-        eprint("✅ Loaded \(visibleCells.count) cells")
+        eprint(.success, "Loaded \(visibleCells.count) cells")
     }
 }
 ```
@@ -398,11 +483,11 @@ Time: < 0.001 seconds (negligible overhead)
 ### 1. Use Per-File Instances
 ```swift
 // ✅ GOOD - Easy to toggle per file
-private let eprint = EPrint()
+private let eprint = EPrint.standard
 
 class MyClass {
     func myMethod() {
-        eprint("🏁 Debug message")
+        eprint(.start, "Debug message")
     }
 }
 ```
@@ -410,39 +495,63 @@ class MyClass {
 // ❌ AVOID - Global instance harder to manage
 class MyClass {
     func myMethod() {
-        EPrint.shared("🏁 Debug message")
+        EPrint.shared(.start, "Debug message")
     }
 }
 ```
 
-### 2. Use Consistent Emojis
+### 2. Use Type-Safe Emojis
 
-Create a convention and stick to it across your project:
-- 🏁 = Start of operation
-- ✅ = Success
-- ❌ = Error
-- ⚠️ = Warning
-- 📏 = Measurements
+Use the emoji parameter for compile-time safety and cleaner code:
 
-### 3. Toggle Based on Build Configuration
+```swift
+// ✅ GOOD - Type-safe, clear, refactorable
+eprint(.start, "Starting operation")
+eprint(.success, "Operation complete")
+eprint(.error, "Operation failed")
+
+// ❌ AVOID - String-based, typo-prone
+eprint("🏁 Starting operation")
+eprint("✅ Operation complete")
+eprint("❌ Operation failed")
+```
+
+### 3. Create Project-Specific Emoji Enums
+
+Define custom emojis for your domain:
+
+```swift
+enum MyProjectEmojis: String, EPrintEmoji {
+    case api = "🌐"
+    case database = "💾"
+    case cache = "⚡️"
+    var emoji: String { rawValue }
+}
+
+// Use consistently across your codebase
+eprint(.api, "Making request")
+eprint(.cache, "Cache hit")
+```
+
+### 4. Toggle Based on Build Configuration
 ```swift
 private let eprint = EPrint(
     enabled: _isDebugAssertConfiguration()
 )
 ```
 
-### 4. Remove Debug Statements Before Shipping
+### 5. Remove Debug Statements Before Shipping
 
 Or simply disable them:
 ```swift
 // Development
-private let eprint = EPrint()
+private let eprint = EPrint.standard
 
 // Production
 private let eprint = EPrint(enabled: false)
 ```
 
-### 5. Use Standard Preset for Most Cases
+### 6. Use Standard Preset for Most Cases
 ```swift
 // ✅ GOOD - Shows location without clutter
 private let eprint = EPrint.standard

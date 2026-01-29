@@ -773,3 +773,279 @@ final class EPrintIntegrationTests: XCTestCase {
         print("✅ Dynamic configuration verified")
     }
 }
+
+// MARK: - Emoji System Tests
+
+/// Tests for the emoji system including protocol, standard emojis, and custom emojis.
+final class EPrintEmojiTests: XCTestCase {
+    
+    func testStandardEmojiValues() {
+        print("🧪 Test: Standard emoji values")
+        
+        // Verify all standard emojis have correct values
+        XCTAssertEqual(Emoji.Standard.start.emoji, "🏁")
+        XCTAssertEqual(Emoji.Standard.success.emoji, "✅")
+        XCTAssertEqual(Emoji.Standard.error.emoji, "❌")
+        XCTAssertEqual(Emoji.Standard.warning.emoji, "⚠️")
+        XCTAssertEqual(Emoji.Standard.info.emoji, "ℹ️")
+        XCTAssertEqual(Emoji.Standard.measurement.emoji, "📏")
+        XCTAssertEqual(Emoji.Standard.observation.emoji, "👁️")
+        XCTAssertEqual(Emoji.Standard.action.emoji, "🚀")
+        XCTAssertEqual(Emoji.Standard.inspection.emoji, "🔍")
+        XCTAssertEqual(Emoji.Standard.metrics.emoji, "📊")
+        XCTAssertEqual(Emoji.Standard.target.emoji, "🎯")
+        XCTAssertEqual(Emoji.Standard.debug.emoji, "🐛")
+        XCTAssertEqual(Emoji.Standard.complete.emoji, "📦")
+        
+        print("✅ All standard emojis verified")
+    }
+    
+    func testEmojiOverloadBasicUsage() {
+        print("🧪 Test: Emoji overload basic usage")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        print("🏁 Calling eprint with emoji overload")
+        eprint(.start, "Test message")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Checking output")
+        XCTAssertEqual(testOutput.count, 1)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Test message")
+        
+        print("✅ Emoji overload basic usage verified")
+    }
+    
+    func testEmojiOverloadWithMultipleTypes() {
+        print("🧪 Test: Multiple emoji types")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        print("📝 Testing different emoji types")
+        eprint(.start, "Starting")
+        eprint(.success, "Success")
+        eprint(.error, "Error")
+        eprint(.warning, "Warning")
+        eprint(.measurement, "Measurement")
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🔍 Verifying messages")
+        XCTAssertEqual(testOutput.count, 5)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Starting")
+        XCTAssertEqual(testOutput.entries[1].message, "✅ Success")
+        XCTAssertEqual(testOutput.entries[2].message, "❌ Error")
+        XCTAssertEqual(testOutput.entries[3].message, "⚠️ Warning")
+        XCTAssertEqual(testOutput.entries[4].message, "📏 Measurement")
+        
+        print("✅ Multiple emoji types verified")
+    }
+    
+    func testEmojiOverloadWithConfiguration() {
+        print("🧪 Test: Emoji overload with configuration (standard)")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration.standard
+        let eprint = EPrint(configuration: config)
+        eprint.configuration.outputs = [testOutput]
+        
+        print("📝 Calling with standard config")
+        eprint(.start, "Test message")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Checking formatted output")
+        XCTAssertEqual(testOutput.count, 1)
+        XCTAssertTrue(testOutput.formattedOutputs[0].contains("🏁 Test message"))
+        XCTAssertTrue(testOutput.formattedOutputs[0].contains("[EPrintTests.swift"))
+        
+        print("✅ Emoji with configuration verified")
+    }
+    
+    func testCustomEmojiEnum() {
+        print("🧪 Test: Custom emoji enum")
+        
+        // Define custom emoji enum
+        enum TestEmojis: String, EPrintEmoji {
+            case custom1 = "🌟"
+            case custom2 = "🎨"
+            case custom3 = "🔥"
+            
+            var emoji: String { rawValue }
+        }
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        print("📝 Using custom emojis")
+        // Need to be explicit since TestEmojis is defined in this scope
+        eprint(TestEmojis.custom1, "Custom message 1")
+        eprint(TestEmojis.custom2, "Custom message 2")
+        eprint(TestEmojis.custom3, "Custom message 3")
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🔍 Verifying custom emojis")
+        XCTAssertEqual(testOutput.count, 3)
+        XCTAssertEqual(testOutput.entries[0].message, "🌟 Custom message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🎨 Custom message 2")
+        XCTAssertEqual(testOutput.entries[2].message, "🔥 Custom message 3")
+        
+        print("✅ Custom emoji enum verified")
+    }
+    
+    func testMixingStandardAndCustomEmojis() {
+        print("🧪 Test: Mixing standard and custom emojis")
+        
+        enum CustomEmojis: String, EPrintEmoji {
+            case api = "🌐"
+            case database = "💾"
+            var emoji: String { rawValue }
+        }
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        print("📝 Using both standard and custom emojis")
+        // Need to be explicit when both enums are in scope
+        eprint(Emoji.Standard.start, "Starting operation")           // Standard
+        eprint(CustomEmojis.api, "Making API call")                // Custom
+        eprint(CustomEmojis.database, "Querying database")         // Custom
+        eprint(Emoji.Standard.success, "Operation complete")         // Standard
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🔍 Verifying mixed emojis")
+        XCTAssertEqual(testOutput.count, 4)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Starting operation")
+        XCTAssertEqual(testOutput.entries[1].message, "🌐 Making API call")
+        XCTAssertEqual(testOutput.entries[2].message, "💾 Querying database")
+        XCTAssertEqual(testOutput.entries[3].message, "✅ Operation complete")
+        
+        print("✅ Mixed emojis verified")
+    }
+    
+    func testEmojiOverloadPreservesMetadata() {
+        print("🧪 Test: Emoji overload preserves metadata")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        eprint(.start, "Test")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Checking metadata")
+        let entry = testOutput.entries[0]
+        
+        XCTAssertTrue(entry.file.contains("EPrintTests.swift"))
+        XCTAssertGreaterThan(entry.line, 0)
+        XCTAssertFalse(entry.function.isEmpty)
+        XCTAssertFalse(entry.thread.isEmpty)
+        
+        print("✅ Metadata preservation verified")
+    }
+    
+    func testBackwardCompatibilityWithStringOnly() {
+        print("🧪 Test: Backward compatibility with string-only syntax")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        print("📝 Using old string-only syntax")
+        eprint("🏁 Old style message")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying old syntax still works")
+        XCTAssertEqual(testOutput.count, 1)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Old style message")
+        
+        print("✅ Backward compatibility verified")
+    }
+    
+    func testEmojiWithStringInterpolation() {
+        print("🧪 Test: Emoji with string interpolation")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        let value = 42
+        let name = "Test"
+        
+        print("📝 Using string interpolation with emojis")
+        eprint(.measurement, "Value is \(value)")
+        eprint(.info, "Name is \(name)")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying interpolation")
+        XCTAssertEqual(testOutput.count, 2)
+        XCTAssertEqual(testOutput.entries[0].message, "📏 Value is 42")
+        XCTAssertEqual(testOutput.entries[1].message, "ℹ️ Name is Test")
+        
+        print("✅ String interpolation verified")
+    }
+}
+
+// MARK: - Debug Mode Tests
+
+/// Tests for EPrint's internal debug mode
+final class EPrintDebugModeTests: XCTestCase {
+    
+    func testDebugModeDefault() {
+        print("🧪 Test: Debug mode default value")
+        
+        // Debug mode should be false by default
+        XCTAssertFalse(EPrint.debugMode)
+        
+        print("✅ Debug mode default verified")
+    }
+    
+    func testDebugModeToggle() {
+        print("🧪 Test: Debug mode toggle")
+        
+        let originalValue = EPrint.debugMode
+        
+        EPrint.debugMode = true
+        XCTAssertTrue(EPrint.debugMode)
+        
+        EPrint.debugMode = false
+        XCTAssertFalse(EPrint.debugMode)
+        
+        // Restore original value
+        EPrint.debugMode = originalValue
+        
+        print("✅ Debug mode toggle verified")
+    }
+    
+    func testDebugModeDoesNotAffectOutput() {
+        print("🧪 Test: Debug mode doesn't affect user output")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(configuration: config)
+        
+        // Test with debug mode off
+        EPrint.debugMode = false
+        eprint(.start, "Message 1")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Test with debug mode on
+        EPrint.debugMode = true
+        eprint(.start, "Message 2")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Restore
+        EPrint.debugMode = false
+        
+        print("🔍 Verifying output is identical")
+        XCTAssertEqual(testOutput.count, 2)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 2")
+        
+        print("✅ Debug mode output independence verified")
+    }
+}
