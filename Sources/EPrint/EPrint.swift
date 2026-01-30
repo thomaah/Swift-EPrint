@@ -99,6 +99,13 @@ public enum Emoji {
 /// eprint("🏁 Starting render")
 /// eprint.enabled = false  // Turn off
 ///
+/// // Global control (affects all instances)
+/// EPrint.globalEnabled = false  // Disable everywhere
+/// EPrint.disableGlobally()      // Alternative syntax
+///
+/// // Override global in specific file
+/// private let eprint = EPrint(activeState: .overrideGlobal)
+///
 /// // Convenience presets
 /// private let eprint = EPrint.minimal    // Just message
 /// private let eprint = EPrint.standard   // File and line
@@ -140,6 +147,111 @@ public final class EPrint: @unchecked Sendable {
     /// ```
     public static var debugMode: Bool = false
     
+    // MARK: - Global Control
+    
+    /// Global enable/disable flag affecting all EPrint instances.
+    ///
+    /// When set to `false`, all EPrint instances (except those with `.overrideGlobal`)
+    /// will be disabled. This provides a single switch to control all debug output
+    /// across your entire application.
+    ///
+    /// Default: `true`
+    ///
+    /// ## Example
+    /// ```swift
+    /// // Disable all EPrint output globally
+    /// EPrint.globalEnabled = false
+    ///
+    /// // Re-enable
+    /// EPrint.globalEnabled = true
+    ///
+    /// // Check status
+    /// if EPrint.globalEnabled {
+    ///     print("EPrint is globally enabled")
+    /// }
+    /// ```
+    ///
+    /// ## Thread Safety
+    /// Access is synchronized via a static queue. Safe to read/write from any thread.
+    public static var globalEnabled: Bool {
+        get {
+            globalQueue.sync { _globalEnabled }
+        }
+        set {
+            globalQueue.sync { _globalEnabled = newValue }
+        }
+    }
+    
+    /// Internal storage for global enabled state
+    private static var _globalEnabled: Bool = true
+    
+    /// Queue for thread-safe access to global state
+    private static let globalQueue = DispatchQueue(
+        label: "com.eprint.global",
+        qos: .utility
+    )
+    
+    /// Convenience method to disable EPrint globally.
+    ///
+    /// This is equivalent to `EPrint.globalEnabled = false`.
+    ///
+    /// ## Example
+    /// ```swift
+    /// EPrint.disableGlobally()
+    /// // All EPrint instances are now silent
+    /// ```
+    public static func disableGlobally() {
+        globalEnabled = false
+    }
+    
+    /// Convenience method to enable EPrint globally.
+    ///
+    /// This is equivalent to `EPrint.globalEnabled = true`.
+    ///
+    /// ## Example
+    /// ```swift
+    /// EPrint.enableGlobally()
+    /// // All EPrint instances are now active
+    /// ```
+    public static func enableGlobally() {
+        globalEnabled = true
+    }
+    
+    // MARK: - Active State
+    
+    /// Defines how an EPrint instance responds to the global enable/disable flag.
+    ///
+    /// This enum controls the relationship between an individual instance and the
+    /// global `EPrint.globalEnabled` setting.
+    ///
+    /// ## Cases
+    /// - `.enabled`: Instance is on and respects global state (default)
+    /// - `.disabled`: Instance is always off, ignores global state
+    /// - `.overrideGlobal`: Instance is always on, ignores global state
+    ///
+    /// ## Example
+    /// ```swift
+    /// // Normal behavior - respects global
+    /// private let eprint = EPrint(activeState: .enabled)
+    ///
+    /// // Always off
+    /// private let eprint = EPrint(activeState: .disabled)
+    ///
+    /// // Always on (with warning at init)
+    /// private let eprint = EPrint(activeState: .overrideGlobal)
+    /// // Prints: ⚠️ EPrint: Using .overrideGlobal - ignoring global state
+    /// ```
+    public enum ActiveState {
+        /// Instance respects global enable/disable (default)
+        case enabled
+        
+        /// Instance is always disabled
+        case disabled
+        
+        /// Instance ignores global state and is always enabled
+        case overrideGlobal
+    }
+    
     // MARK: - Properties
     
     /// The configuration controlling display behavior.
@@ -161,27 +273,48 @@ public final class EPrint: @unchecked Sendable {
         }
     }
     
-    /// Convenience property for toggling output on/off.
-    ///
-    /// This provides a simple way to enable/disable without touching the full configuration.
+    /// The active state determining how this instance responds to global control.
     ///
     /// ## Example
     /// ```swift
-    /// eprint.enabled = false  // Turn off
-    /// eprint("🏁 Not printed")
-    /// eprint.enabled = true   // Turn back on
-    /// eprint("🏁 Printed again")
+    /// let eprint = EPrint()
+    /// eprint.activeState = .disabled  // Turn off
+    /// eprint.activeState = .overrideGlobal  // Always on
+    /// ```
+    public var activeState: ActiveState {
+        get {
+            queue.sync { _activeState }
+        }
+        set {
+            queue.sync { _activeState = newValue }
+        }
+    }
+    
+    /// Convenience property for toggling output on/off.
+    ///
+    /// This provides a simple way to enable/disable without touching the full configuration.
+    /// Setting this property maps to `.enabled` or `.disabled` active states.
+    ///
+    /// **Note**: For backward compatibility. Consider using `activeState` for more control.
+    ///
+    /// ## Example
+    /// ```swift
+    /// eprint.enabled = false  // Sets activeState to .disabled
+    /// eprint.enabled = true   // Sets activeState to .enabled
     /// ```
     public var enabled: Bool {
         get {
-            queue.sync { _configuration.enabled }
+            shouldPrint
         }
         set {
-            queue.sync { _configuration.enabled = newValue }
+            activeState = newValue ? .enabled : .disabled
         }
     }
     
     // MARK: - Private Properties
+    
+    /// Internal storage for active state (thread-safe access via queue)
+    private var _activeState: ActiveState
     
     /// Internal storage for configuration (thread-safe access via queue)
     private var _configuration: EPrintConfiguration
@@ -192,25 +325,64 @@ public final class EPrint: @unchecked Sendable {
     /// and ensuring output integrity even under heavy concurrent use.
     private let queue: DispatchQueue
     
+    /// Computed property determining if this instance should actually print.
+    ///
+    /// This evaluates the activeState against the global state AND configuration.enabled.
+    /// Both must be true for output to occur (except for .overrideGlobal which bypasses everything).
+    private var shouldPrint: Bool {
+        // First check configuration's enabled flag (backward compatibility)
+        let configEnabled = queue.sync { _configuration.enabled }
+        
+        // Evaluate activeState against global
+        let stateEnabled: Bool
+        switch queue.sync(execute: { _activeState }) {
+        case .enabled:
+            stateEnabled = EPrint.globalEnabled
+        case .disabled:
+            stateEnabled = false
+        case .overrideGlobal:
+            // Override bypasses both config and global
+            return true
+        }
+        
+        // Both config and state must be enabled (unless overridden)
+        return configEnabled && stateEnabled
+    }
+    
     // MARK: - Initialization
     
-    /// Creates a new EPrint instance with custom configuration.
+    /// Creates a new EPrint instance with custom active state and configuration.
     ///
     /// This is the most flexible initializer, allowing full control over behavior.
     ///
-    /// - Parameter configuration: The display configuration to use
+    /// - Parameters:
+    ///   - activeState: How this instance responds to global control (default: .enabled)
+    ///   - configuration: The display configuration to use
     ///
     /// ## Example
     /// ```swift
-    /// let eprint = EPrint(configuration: .verbose)
-    /// eprint("🏁 Starting render")
+    /// // Normal instance
+    /// let eprint = EPrint(activeState: .enabled, configuration: .verbose)
+    ///
+    /// // Always-on instance (prints warning)
+    /// let eprint = EPrint(activeState: .overrideGlobal, configuration: .standard)
+    /// // Output: ⚠️ EPrint: Using .overrideGlobal - ignoring global state
     /// ```
-    public init(configuration: EPrintConfiguration = EPrintConfiguration()) {
+    public init(
+        activeState: ActiveState = .enabled,
+        configuration: EPrintConfiguration = EPrintConfiguration()
+    ) {
+        self._activeState = activeState
         self._configuration = configuration
         self.queue = DispatchQueue(
             label: "com.eprint.queue.\(UUID().uuidString)",
             qos: .utility
         )
+        
+        // Print warning if overriding global
+        if activeState == .overrideGlobal {
+            print("⚠️ EPrint: Using .overrideGlobal - ignoring global state")
+        }
     }
     
     /// Convenience initializer with individual settings.
@@ -218,8 +390,11 @@ public final class EPrint: @unchecked Sendable {
     /// This provides a clean way to create an instance with specific settings
     /// without manually building a configuration.
     ///
+    /// **Note**: This initializer always uses `.enabled` active state for backward compatibility.
+    /// Use the main initializer if you need `.disabled` or `.overrideGlobal`.
+    ///
     /// - Parameters:
-    ///   - enabled: Master switch for output (default: true)
+    ///   - enabled: Master switch for output (default: true) - Note: Sets activeState, not configuration
     ///   - showFileName: Display file name (default: false)
     ///   - showLineNumber: Display line number (default: false)
     ///   - showFunction: Display function name (default: false)
@@ -253,7 +428,10 @@ public final class EPrint: @unchecked Sendable {
             showThread: showThread,
             outputs: outputs
         )
-        self.init(configuration: config)
+        self.init(
+            activeState: enabled ? .enabled : .disabled,
+            configuration: config
+        )
     }
     
     // MARK: - Main Print Function
@@ -360,7 +538,7 @@ public final class EPrint: @unchecked Sendable {
     ) {
         // Early exit if disabled - this keeps overhead minimal
         // We check this before doing ANY work (even string interpolation happens after this check)
-        guard enabled else { return }
+        guard shouldPrint else { return }
         
         if EPrint.debugMode {
             print("🎯 EPrint.callAsFunction called", message)
@@ -512,10 +690,11 @@ extension EPrint: CustomStringConvertible {
     ///
     /// ## Example Output
     /// ```
-    /// EPrint(enabled: true, config: EPrintConfiguration(enabled: true, displays: [fileName, lineNumber], outputs: 1))
+    /// EPrint(activeState: enabled, config: EPrintConfiguration(enabled: true, displays: [fileName, lineNumber], outputs: 1))
     /// ```
     public var description: String {
         let config = queue.sync { _configuration }
-        return "EPrint(enabled: \(config.enabled), config: \(config))"
+        let state = queue.sync { _activeState }
+        return "EPrint(activeState: \(state), config: \(config))"
     }
 }

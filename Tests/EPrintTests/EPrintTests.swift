@@ -514,9 +514,15 @@ final class EPrintMainTests: XCTestCase {
     func testSharedInstance() {
         print("🧪 Test: Shared instance accessibility")
         
+        // Save original state
+        let originalEnabled = EPrint.shared.enabled
+        
         // Just verify shared instance exists and is callable
         EPrint.shared.enabled = false  // Disable so we don't pollute output
         EPrint.shared("🏁 Test shared")
+        
+        // Restore original state
+        EPrint.shared.enabled = originalEnabled
         
         print("✅ Shared instance verified")
     }
@@ -1047,5 +1053,614 @@ final class EPrintDebugModeTests: XCTestCase {
         XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 2")
         
         print("✅ Debug mode output independence verified")
+    }
+}
+
+// MARK: - Global Control Tests (v1.1.1)
+
+/// Tests for global enable/disable functionality added in v1.1.1
+final class EPrintGlobalControlTests: XCTestCase {
+    
+    override func setUp() {
+        super.setUp()
+        // Ensure global is enabled at start of each test
+        EPrint.enableGlobally()
+        print("🏁 Test setup: Global enabled")
+    }
+    
+    override func tearDown() {
+        // Restore global state after each test
+        EPrint.enableGlobally()
+        print("🧹 Test teardown: Global restored")
+        super.tearDown()
+    }
+    
+    func testGlobalEnabledDefault() {
+        print("🧪 Test: Global enabled default value")
+        
+        XCTAssertTrue(EPrint.globalEnabled)
+        
+        print("✅ Global enabled default verified")
+    }
+    
+    func testGlobalEnabledProperty() {
+        print("🧪 Test: Global enabled property get/set")
+        
+        // Test setting to false
+        EPrint.globalEnabled = false
+        XCTAssertFalse(EPrint.globalEnabled)
+        print("🔍 Set to false: \(EPrint.globalEnabled)")
+        
+        // Test setting to true
+        EPrint.globalEnabled = true
+        XCTAssertTrue(EPrint.globalEnabled)
+        print("🔍 Set to true: \(EPrint.globalEnabled)")
+        
+        print("✅ Global enabled property verified")
+    }
+    
+    func testDisableGloballyMethod() {
+        print("🧪 Test: disableGlobally() method")
+        
+        EPrint.disableGlobally()
+        XCTAssertFalse(EPrint.globalEnabled)
+        print("🔍 After disableGlobally(): \(EPrint.globalEnabled)")
+        
+        print("✅ disableGlobally() verified")
+    }
+    
+    func testEnableGloballyMethod() {
+        print("🧪 Test: enableGlobally() method")
+        
+        EPrint.globalEnabled = false
+        print("🔍 Disabled: \(EPrint.globalEnabled)")
+        
+        EPrint.enableGlobally()
+        XCTAssertTrue(EPrint.globalEnabled)
+        print("🔍 After enableGlobally(): \(EPrint.globalEnabled)")
+        
+        print("✅ enableGlobally() verified")
+    }
+    
+    func testGlobalDisableAffectsInstances() {
+        print("🧪 Test: Global disable affects normal instances")
+        
+        let testOutput = TestOutput()
+        let config = EPrintConfiguration(outputs: [testOutput])
+        let eprint = EPrint(activeState: .enabled, configuration: config)
+        
+        // Print with global enabled
+        print("📝 Printing with global enabled")
+        eprint(.start, "Message 1")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Disable globally
+        print("🚫 Disabling globally")
+        EPrint.disableGlobally()
+        eprint(.start, "Message 2 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Re-enable globally
+        print("✅ Re-enabling globally")
+        EPrint.enableGlobally()
+        eprint(.start, "Message 3")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Checking output: \(testOutput.count) entries")
+        XCTAssertEqual(testOutput.count, 2)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 3")
+        
+        print("✅ Global disable effect verified")
+    }
+    
+    func testGlobalDisableAffectsMultipleInstances() {
+        print("🧪 Test: Global disable affects multiple instances")
+        
+        let output1 = TestOutput()
+        let output2 = TestOutput()
+        let output3 = TestOutput()
+        
+        let eprint1 = EPrint(activeState: .enabled, configuration: EPrintConfiguration(outputs: [output1]))
+        let eprint2 = EPrint(activeState: .enabled, configuration: EPrintConfiguration(outputs: [output2]))
+        let eprint3 = EPrint(activeState: .enabled, configuration: EPrintConfiguration(outputs: [output3]))
+        
+        print("📝 All instances printing with global enabled")
+        eprint1(.start, "Instance 1")
+        eprint2(.start, "Instance 2")
+        eprint3(.start, "Instance 3")
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🚫 Disabling globally")
+        EPrint.disableGlobally()
+        
+        print("📝 All instances printing with global disabled")
+        eprint1(.start, "Should not appear")
+        eprint2(.start, "Should not appear")
+        eprint3(.start, "Should not appear")
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🔍 Verifying all instances were affected")
+        XCTAssertEqual(output1.count, 1)
+        XCTAssertEqual(output2.count, 1)
+        XCTAssertEqual(output3.count, 1)
+        
+        print("✅ Multiple instances affected by global verified")
+    }
+    
+    func testGlobalThreadSafety() {
+        print("🧪 Test: Global state is thread-safe")
+        
+        let expectation = self.expectation(description: "Concurrent global access")
+        expectation.expectedFulfillmentCount = 10
+        
+        print("🧵 Starting concurrent global state modifications")
+        DispatchQueue.concurrentPerform(iterations: 10) { index in
+            // Rapidly toggle global state
+            EPrint.globalEnabled = index % 2 == 0
+            let current = EPrint.globalEnabled
+            print("🔍 Thread \(index): Set to \(index % 2 == 0), read as \(current)")
+            expectation.fulfill()
+        }
+        
+        waitForExpectations(timeout: 5)
+        
+        print("✅ Thread safety verified (no crashes)")
+    }
+}
+
+// MARK: - ActiveState Tests (v1.1.1)
+
+/// Tests for the new ActiveState enum added in v1.1.1
+final class EPrintActiveStateTests: XCTestCase {
+    
+    override func setUp() {
+        super.setUp()
+        EPrint.enableGlobally()
+        print("🏁 Test setup: Global enabled")
+    }
+    
+    override func tearDown() {
+        EPrint.enableGlobally()
+        print("🧹 Test teardown: Global restored")
+        super.tearDown()
+    }
+    
+    func testActiveStateEnabled() {
+        print("🧪 Test: ActiveState.enabled respects global")
+        
+        let testOutput = TestOutput()
+        let eprint = EPrint(
+            activeState: .enabled,
+            configuration: EPrintConfiguration(outputs: [testOutput])
+        )
+        
+        // With global enabled
+        print("✅ Global enabled, state enabled")
+        eprint(.start, "Message 1")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // With global disabled
+        print("🚫 Global disabled, state enabled")
+        EPrint.disableGlobally()
+        eprint(.start, "Message 2 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Back to global enabled
+        print("✅ Global enabled again")
+        EPrint.enableGlobally()
+        eprint(.start, "Message 3")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying .enabled state respects global")
+        XCTAssertEqual(testOutput.count, 2)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 3")
+        
+        print("✅ .enabled state behavior verified")
+    }
+    
+    func testActiveStateDisabled() {
+        print("🧪 Test: ActiveState.disabled is always off")
+        
+        let testOutput = TestOutput()
+        let eprint = EPrint(
+            activeState: .disabled,
+            configuration: EPrintConfiguration(outputs: [testOutput])
+        )
+        
+        // With global enabled
+        print("✅ Global enabled, state disabled")
+        eprint(.start, "Message 1 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // With global disabled
+        print("🚫 Global disabled, state disabled")
+        EPrint.disableGlobally()
+        eprint(.start, "Message 2 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Back to global enabled
+        print("✅ Global enabled again, state still disabled")
+        EPrint.enableGlobally()
+        eprint(.start, "Message 3 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying .disabled state never prints")
+        XCTAssertEqual(testOutput.count, 0)
+        
+        print("✅ .disabled state behavior verified")
+    }
+    
+    func testActiveStateOverrideGlobal() {
+        print("🧪 Test: ActiveState.overrideGlobal ignores global")
+        
+        let testOutput = TestOutput()
+        
+        print("⚠️ Creating instance with .overrideGlobal (expect warning)")
+        let eprint = EPrint(
+            activeState: .overrideGlobal,
+            configuration: EPrintConfiguration(outputs: [testOutput])
+        )
+        
+        // With global enabled
+        print("✅ Global enabled, state override")
+        eprint(.start, "Message 1")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // With global disabled - should STILL print
+        print("🚫 Global disabled, state override (should still print)")
+        EPrint.disableGlobally()
+        eprint(.start, "Message 2")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Back to global enabled
+        print("✅ Global enabled again")
+        EPrint.enableGlobally()
+        eprint(.start, "Message 3")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying .overrideGlobal always prints")
+        XCTAssertEqual(testOutput.count, 3)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 2")
+        XCTAssertEqual(testOutput.entries[2].message, "🏁 Message 3")
+        
+        print("✅ .overrideGlobal state behavior verified")
+    }
+    
+    func testActiveStateProperty() {
+        print("🧪 Test: activeState property get/set")
+        
+        let testOutput = TestOutput()
+        let eprint = EPrint(
+            activeState: .enabled,
+            configuration: EPrintConfiguration(outputs: [testOutput])
+        )
+        
+        // Check initial state
+        print("🔍 Initial state")
+        XCTAssertEqual(eprint.activeState, .enabled)
+        
+        // Change to disabled
+        print("🚫 Setting to .disabled")
+        eprint.activeState = .disabled
+        XCTAssertEqual(eprint.activeState, .disabled)
+        eprint(.start, "Should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Change to overrideGlobal
+        print("⚠️ Setting to .overrideGlobal")
+        eprint.activeState = .overrideGlobal
+        XCTAssertEqual(eprint.activeState, .overrideGlobal)
+        EPrint.disableGlobally()
+        eprint(.start, "Should appear despite global")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying state changes worked")
+        XCTAssertEqual(testOutput.count, 1)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Should appear despite global")
+        
+        print("✅ activeState property verified")
+    }
+    
+    func testActiveStateDefault() {
+        print("🧪 Test: Default activeState is .enabled")
+        
+        let eprint = EPrint()
+        
+        print("🔍 Checking default activeState")
+        XCTAssertEqual(eprint.activeState, .enabled)
+        
+        print("✅ Default activeState verified")
+    }
+}
+
+// MARK: - Backward Compatibility Tests (v1.1.1)
+
+/// Tests ensuring backward compatibility with the old enabled property
+final class EPrintBackwardCompatibilityTests: XCTestCase {
+    
+    override func setUp() {
+        super.setUp()
+        EPrint.enableGlobally()
+    }
+    
+    override func tearDown() {
+        EPrint.enableGlobally()
+        super.tearDown()
+    }
+    
+    func testEnabledPropertyBackwardCompatibility() {
+        print("🧪 Test: enabled property still works")
+        
+        let testOutput = TestOutput()
+        let eprint = EPrint(configuration: EPrintConfiguration(outputs: [testOutput]))
+        
+        // Old syntax: eprint.enabled = false
+        print("🚫 Using old syntax: eprint.enabled = false")
+        eprint.enabled = false
+        eprint(.start, "Should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Old syntax: eprint.enabled = true
+        print("✅ Using old syntax: eprint.enabled = true")
+        eprint.enabled = true
+        eprint(.start, "Should appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying old syntax still works")
+        XCTAssertEqual(testOutput.count, 1)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Should appear")
+        
+        print("✅ Backward compatibility verified")
+    }
+    
+    func testEnabledPropertyMapsToActiveState() {
+        print("🧪 Test: enabled property maps to activeState")
+        
+        let eprint = EPrint()
+        
+        // Setting enabled = false should set activeState to .disabled
+        print("🚫 Setting enabled = false")
+        eprint.enabled = false
+        print("🔍 activeState is now: \(eprint.activeState)")
+        XCTAssertEqual(eprint.activeState, .disabled)
+        
+        // Setting enabled = true should set activeState to .enabled
+        print("✅ Setting enabled = true")
+        eprint.enabled = true
+        print("🔍 activeState is now: \(eprint.activeState)")
+        XCTAssertEqual(eprint.activeState, .enabled)
+        
+        print("✅ enabled-to-activeState mapping verified")
+    }
+    
+    func testEnabledPropertyReflectsEffectiveState() {
+        print("🧪 Test: enabled property reflects effective state")
+        
+        let eprint1 = EPrint(activeState: .enabled)
+        let eprint2 = EPrint(activeState: .disabled)
+        let eprint3 = EPrint(activeState: .overrideGlobal)
+        
+        // With global enabled
+        print("✅ Global enabled")
+        XCTAssertTrue(eprint1.enabled)   // .enabled respects global (true)
+        XCTAssertFalse(eprint2.enabled)  // .disabled always false
+        XCTAssertTrue(eprint3.enabled)   // .overrideGlobal always true
+        
+        // With global disabled
+        print("🚫 Global disabled")
+        EPrint.disableGlobally()
+        XCTAssertFalse(eprint1.enabled)  // .enabled respects global (false)
+        XCTAssertFalse(eprint2.enabled)  // .disabled always false
+        XCTAssertTrue(eprint3.enabled)   // .overrideGlobal always true
+        
+        print("✅ enabled property reflection verified")
+    }
+    
+    func testOldInitializerStillWorks() {
+        print("🧪 Test: Old initializer with enabled parameter")
+        
+        let testOutput = TestOutput()
+        
+        // Old style: EPrint(enabled: Bool)
+        print("📝 Using old initializer: EPrint(enabled: false, ...)")
+        let eprint = EPrint(
+            enabled: false,
+            showFileName: true,
+            outputs: [testOutput]
+        )
+        
+        print("🔍 Verifying instance is disabled")
+        eprint(.start, "Should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        XCTAssertEqual(testOutput.count, 0)
+        XCTAssertEqual(eprint.activeState, .disabled)
+        
+        print("✅ Old initializer compatibility verified")
+    }
+}
+
+// MARK: - Integration Tests (v1.1.1)
+
+/// Integration tests for complex scenarios with v1.1.1 features
+final class EPrintV111IntegrationTests: XCTestCase {
+    
+    override func setUp() {
+        super.setUp()
+        EPrint.enableGlobally()
+    }
+    
+    override func tearDown() {
+        EPrint.enableGlobally()
+        super.tearDown()
+    }
+    
+    func testMixedStatesWithGlobalControl() {
+        print("🧪 Test: Mixed active states with global control")
+        
+        let output1 = TestOutput()
+        let output2 = TestOutput()
+        let output3 = TestOutput()
+        
+        let normalEprint = EPrint(activeState: .enabled, configuration: EPrintConfiguration(outputs: [output1]))
+        let disabledEprint = EPrint(activeState: .disabled, configuration: EPrintConfiguration(outputs: [output2]))
+        let overrideEprint = EPrint(activeState: .overrideGlobal, configuration: EPrintConfiguration(outputs: [output3]))
+        
+        print("✅ All printing with global enabled")
+        normalEprint(.start, "Normal 1")
+        disabledEprint(.start, "Disabled 1 - never appears")
+        overrideEprint(.start, "Override 1")
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🚫 Disabling globally")
+        EPrint.disableGlobally()
+        
+        print("📝 All printing with global disabled")
+        normalEprint(.start, "Normal 2 - respects global")
+        disabledEprint(.start, "Disabled 2 - never appears")
+        overrideEprint(.start, "Override 2")
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("🔍 Verifying mixed behavior")
+        XCTAssertEqual(output1.count, 1) // Normal: only when global enabled
+        XCTAssertEqual(output2.count, 0) // Disabled: never
+        XCTAssertEqual(output3.count, 2) // Override: always
+        
+        print("✅ Mixed states integration verified")
+    }
+    
+    func testRuntimeStateChanges() {
+        print("🧪 Test: Runtime state changes")
+        
+        let testOutput = TestOutput()
+        let eprint = EPrint(
+            activeState: .enabled,
+            configuration: EPrintConfiguration(outputs: [testOutput])
+        )
+        
+        // Start as .enabled
+        print("✅ State: .enabled, Global: enabled")
+        eprint(.start, "Message 1")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Change to .disabled
+        print("🚫 Changing to .disabled")
+        eprint.activeState = .disabled
+        eprint(.start, "Message 2 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Disable global (shouldn't matter since state is .disabled)
+        print("🌐 Disabling global (state already .disabled)")
+        EPrint.disableGlobally()
+        eprint(.start, "Message 3 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Change to .overrideGlobal
+        print("⚠️ Changing to .overrideGlobal (global still disabled)")
+        eprint.activeState = .overrideGlobal
+        eprint(.start, "Message 4")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Re-enable global
+        print("✅ Re-enabling global")
+        EPrint.enableGlobally()
+        eprint(.start, "Message 5")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying runtime state changes")
+        XCTAssertEqual(testOutput.count, 3)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 4")
+        XCTAssertEqual(testOutput.entries[2].message, "🏁 Message 5")
+        
+        print("✅ Runtime state changes verified")
+    }
+    
+    func testPresetInstancesWithGlobalControl() {
+        print("🧪 Test: Preset instances respect global control")
+        
+        // Preset instances should use .enabled by default
+        let minimal = EPrint.minimal
+        let standard = EPrint.standard
+        let verbose = EPrint.verbose
+        
+        print("🔍 Checking preset states")
+        XCTAssertEqual(minimal.activeState, .enabled)
+        XCTAssertEqual(standard.activeState, .enabled)
+        XCTAssertEqual(verbose.activeState, .enabled)
+        
+        // They should all respect global disable
+        print("🚫 Disabling globally")
+        EPrint.disableGlobally()
+        
+        XCTAssertFalse(minimal.enabled)
+        XCTAssertFalse(standard.enabled)
+        XCTAssertFalse(verbose.enabled)
+        
+        print("✅ Preset instances verified")
+    }
+    
+    func testSharedInstanceWithGlobalControl() {
+        print("🧪 Test: Shared instance respects global control")
+        
+        // Save original configuration to restore later
+        let originalConfig = EPrint.shared.configuration
+        let originalState = EPrint.shared.activeState
+        
+        // Create fresh test output
+        let testOutput = TestOutput()
+        EPrint.shared.configuration = EPrintConfiguration(outputs: [testOutput])
+        
+        print("✅ Printing with global enabled")
+        EPrint.shared(.start, "Message 1")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🚫 Disabling globally")
+        EPrint.disableGlobally()
+        EPrint.shared(.start, "Message 2 - should not appear")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("✅ Re-enabling globally")
+        EPrint.enableGlobally()
+        EPrint.shared(.start, "Message 3")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        print("🔍 Verifying shared instance respects global")
+        XCTAssertEqual(testOutput.count, 2)
+        XCTAssertEqual(testOutput.entries[0].message, "🏁 Message 1")
+        XCTAssertEqual(testOutput.entries[1].message, "🏁 Message 3")
+        
+        // Restore original configuration
+        EPrint.shared.configuration = originalConfig
+        EPrint.shared.activeState = originalState
+        
+        print("✅ Shared instance global control verified")
+    }
+    
+    func testGlobalControlDoesNotAffectConfiguration() {
+        print("🧪 Test: Global control doesn't affect configuration")
+        
+        let testOutput = TestOutput()
+        let eprint = EPrint(
+            activeState: .enabled,
+            configuration: EPrintConfiguration.standard
+        )
+        eprint.configuration.outputs = [testOutput]
+        
+        // Configuration should remain unchanged regardless of global
+        let originalConfig = eprint.configuration
+        
+        print("🚫 Disabling globally")
+        EPrint.disableGlobally()
+        
+        print("🔍 Checking configuration unchanged")
+        XCTAssertTrue(eprint.configuration.showFileName)
+        XCTAssertTrue(eprint.configuration.showLineNumber)
+        XCTAssertEqual(eprint.configuration, originalConfig)
+        
+        print("✅ Configuration independence verified")
     }
 }

@@ -1,6 +1,6 @@
 # EPrint 🎯
 
-**Enhanced Print Debugging for Swift**
+**Enhanced Print Debugging for Swift** (v1.1.1)
 
 A lightweight, protocol-based print debugging library with emoji support, configurable output, and zero overhead when disabled. Make your debug output beautiful, informative, and production-ready.
 
@@ -27,6 +27,8 @@ Traditional `print()` statements are great, but they have limitations:
 ## Features ✨
 
 - 🎯 **Dead Simple** - Works just like `print()`, but better
+- 🌐 **Global Control** - Disable all EPrint output with one line (v1.1.1)
+- 🔓 **Override System** - Keep specific files enabled even when globally disabled (v1.1.1)
 - 🔌 **Per-File Toggle** - Enable/disable debugging per file with one line
 - 📊 **Rich Metadata** - Optionally show file, line, function, timestamp, thread
 - 🎨 **Emoji Support** - Use emojis to visually categorize your debug output
@@ -39,6 +41,50 @@ Traditional `print()` statements are great, but they have limitations:
 
 ---
 
+## What's New in v1.1.1 🎉
+
+### Global Control System
+Control all EPrint output across your entire application with a single switch:
+
+```swift
+// Disable ALL EPrint output everywhere
+EPrint.globalEnabled = false
+
+// Or use the convenience method
+EPrint.disableGlobally()
+
+// Re-enable everything
+EPrint.enableGlobally()
+```
+
+### Override System
+Need one file to keep printing even when globally disabled? Use `.overrideGlobal`:
+
+```swift
+// This file will ALWAYS print, even if globally disabled
+private let eprint = EPrint(activeState: .overrideGlobal)
+// Prints: ⚠️ EPrint: Using .overrideGlobal - ignoring global state
+
+// Now this eprint will work regardless of EPrint.globalEnabled
+eprint(.start, "This always prints!")
+```
+
+### Active State Enum
+More control over how instances respond to global settings:
+
+```swift
+// Respects global setting (default)
+private let eprint = EPrint(activeState: .enabled)
+
+// Always off, ignores global
+private let eprint = EPrint(activeState: .disabled)
+
+// Always on, ignores global (with warning)
+private let eprint = EPrint(activeState: .overrideGlobal)
+```
+
+---
+
 ## Installation 📦
 
 ### Swift Package Manager
@@ -46,14 +92,14 @@ Traditional `print()` statements are great, but they have limitations:
 Add EPrint to your `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/thomaah/EPrint.git", from: "1.0.0")
+    .package(url: "https://github.com/thomaah/EPrint.git", from: "1.1.1")
 ]
 ```
 
 Or in Xcode:
 1. File → Add Package Dependencies
 2. Enter: `https://github.com/thomaah/EPrint.git`
-3. Select version and add to your target
+3. Select version 1.1.1 or later
 
 ---
 
@@ -98,6 +144,31 @@ class PDFRenderer {
 
 // Toggle debugging for this entire file
 // eprint.enabled = false  // Uncomment to disable
+```
+
+### Global Control (New in v1.1.1)
+```swift
+// In your app startup or settings
+EPrint.disableGlobally()  // Turn off ALL EPrint output
+
+// Or use property syntax
+EPrint.globalEnabled = false
+
+// Re-enable when needed
+EPrint.enableGlobally()
+```
+
+### Override Global (New in v1.1.1)
+```swift
+// In a critical debugging file that should ALWAYS print
+private let eprint = EPrint(
+    activeState: .overrideGlobal,
+    configuration: .standard
+)
+// Prints: ⚠️ EPrint: Using .overrideGlobal - ignoring global state
+
+// This file will now print even when EPrint.globalEnabled = false
+eprint(.start, "This always prints!")
 ```
 
 ---
@@ -258,10 +329,12 @@ eprint(.start, "Starting render")
 Build exactly the configuration you need:
 ```swift
 private let eprint = EPrint(
-    enabled: true,
-    showFileName: true,
-    showLineNumber: true,
-    showTimestamp: true
+    activeState: .enabled,  // New in v1.1.1
+    configuration: EPrintConfiguration(
+        showFileName: true,
+        showLineNumber: true,
+        showTimestamp: true
+    )
 )
 eprint(.start, "Starting render")
 ```
@@ -275,11 +348,14 @@ eprint(.start, "Starting render")
 ```swift
 private let eprint = EPrint()
 
-// Turn off debugging for this file
-eprint.enabled = false
+// Per-instance control
+eprint.enabled = false  // Turn off this instance
 
-// Turn it back on
-eprint.enabled = true
+// Or use active state
+eprint.activeState = .disabled  // Same effect
+
+// Global control (v1.1.1)
+EPrint.globalEnabled = false  // Turn off ALL instances
 
 // Toggle based on conditions
 eprint.enabled = isDebugMode
@@ -289,6 +365,29 @@ eprint.enabled = pageIndex == 5  // Only debug page 5
 ---
 
 ## Advanced Features 🔧
+
+### Global Control Strategies (v1.1.1)
+
+```swift
+// Strategy 1: Global toggle based on build configuration
+#if DEBUG
+EPrint.globalEnabled = true
+#else
+EPrint.globalEnabled = false
+#endif
+
+// Strategy 2: Runtime control via settings
+if UserDefaults.standard.bool(forKey: "enableDebugLogging") {
+    EPrint.enableGlobally()
+} else {
+    EPrint.disableGlobally()
+}
+
+// Strategy 3: Critical debugging files override global
+// In CriticalDebugFile.swift:
+private let eprint = EPrint(activeState: .overrideGlobal)
+// This file always prints, even when globally disabled
+```
 
 ### Multiple Outputs
 
@@ -440,6 +539,14 @@ class ScrollViewController: UIViewController {
 | `showThread` | `Bool` | `false` | Display thread info |
 | `outputs` | `[EPrintOutput]` | `[ConsoleOutput()]` | Output destinations |
 
+### EPrint.ActiveState (v1.1.1)
+
+| Case | Description |
+|------|-------------|
+| `.enabled` | Instance respects global state (default) |
+| `.disabled` | Instance is always off |
+| `.overrideGlobal` | Instance is always on, ignores global |
+
 ### EPrintEntry
 
 Every print statement captures complete metadata:
@@ -533,14 +640,24 @@ eprint(.api, "Making request")
 eprint(.cache, "Cache hit")
 ```
 
-### 4. Toggle Based on Build Configuration
+### 4. Use Global Control for Production (v1.1.1)
 ```swift
-private let eprint = EPrint(
-    enabled: _isDebugAssertConfiguration()
-)
+// In AppDelegate or startup code
+#if DEBUG
+EPrint.globalEnabled = true
+#else
+EPrint.globalEnabled = false
+#endif
 ```
 
-### 5. Remove Debug Statements Before Shipping
+### 5. Override Global for Critical Debugging (v1.1.1)
+```swift
+// In files that need debugging even in production
+private let eprint = EPrint(activeState: .overrideGlobal)
+// Prints: ⚠️ EPrint: Using .overrideGlobal - ignoring global state
+```
+
+### 6. Remove Debug Statements Before Shipping
 
 Or simply disable them:
 ```swift
@@ -548,10 +665,13 @@ Or simply disable them:
 private let eprint = EPrint.standard
 
 // Production
-private let eprint = EPrint(enabled: false)
+private let eprint = EPrint(activeState: .disabled)
+
+// Or use global control
+EPrint.globalEnabled = false
 ```
 
-### 6. Use Standard Preset for Most Cases
+### 7. Use Standard Preset for Most Cases
 ```swift
 // ✅ GOOD - Shows location without clutter
 private let eprint = EPrint.standard
@@ -602,7 +722,9 @@ Benefits:
 ### EPrint
 ```swift
 // Initialization
-init(configuration: EPrintConfiguration = EPrintConfiguration())
+init(activeState: ActiveState = .enabled,
+     configuration: EPrintConfiguration = EPrintConfiguration())
+     
 init(enabled: Bool = true,
      showFileName: Bool = false,
      showLineNumber: Bool = false,
@@ -613,7 +735,15 @@ init(enabled: Bool = true,
 
 // Properties
 var configuration: EPrintConfiguration { get set }
-var enabled: Bool { get set }
+var activeState: ActiveState { get set }  // v1.1.1
+var enabled: Bool { get set }  // For backward compatibility
+
+// Static Properties (v1.1.1)
+static var globalEnabled: Bool { get set }
+
+// Static Methods (v1.1.1)
+static func disableGlobally()
+static func enableGlobally()
 
 // Static Instances
 static let shared: EPrint
@@ -626,6 +756,21 @@ func callAsFunction(_ message: String,
                     file: String = #file,
                     line: Int = #line,
                     function: String = #function)
+                    
+func callAsFunction(_ emoji: Emoji.Standard,
+                    _ message: String,
+                    file: String = #file,
+                    line: Int = #line,
+                    function: String = #function)
+```
+
+### EPrint.ActiveState (v1.1.1)
+```swift
+enum ActiveState {
+    case enabled        // Respects global
+    case disabled       // Always off
+    case overrideGlobal // Always on
+}
 ```
 
 ### EPrintConfiguration
@@ -675,13 +820,16 @@ A: Yes! EPrint is fully `Sendable` and thread-safe.
 A: Near-zero when disabled, and very fast when enabled (~43k prints/sec).
 
 **Q: Can I use EPrint in production?**  
-A: Yes! Just set `enabled: false` or remove the statements. Zero overhead when disabled.
+A: Yes! Just set `EPrint.globalEnabled = false` or use `activeState: .disabled`. Zero overhead when disabled.
 
 **Q: Does it work on Linux?**  
 A: Yes! EPrint uses Foundation only and works on all Swift platforms.
 
+**Q: How does the new global control work? (v1.1.1)**  
+A: Set `EPrint.globalEnabled = false` to disable all instances. Individual instances with `.overrideGlobal` will still print.
+
 **Q: Can I filter output?**  
-A: Create per-file instances and toggle them individually. More advanced filtering coming in future versions.
+A: Create per-file instances and toggle them individually, or use global control. More advanced filtering coming in future versions.
 
 **Q: How do I save output to a file?**  
 A: Use `FileOutput` (coming soon) or create a custom `EPrintOutput`.
@@ -732,6 +880,27 @@ All tests should pass before submitting a PR.
 ## License 📄
 
 EPrint is released under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## Changelog 📝
+
+### v1.1.1 (2026)
+- ✨ **New**: Global control system - `EPrint.globalEnabled` property
+- ✨ **New**: Convenience methods `disableGlobally()` and `enableGlobally()`
+- ✨ **New**: `ActiveState` enum for fine-grained control
+- ✨ **New**: `.overrideGlobal` state to bypass global disable
+- ⚠️ **Warning**: Override instances print warning at initialization
+- 🔧 **Improved**: Thread safety for global state
+- 📝 **Note**: `enabled` property maintained for backward compatibility
+
+### v1.0.0 (2026)
+- 🎉 Initial release
+- 🎯 Core EPrint functionality
+- 🎨 Emoji system with standard set
+- 📦 Protocol-based outputs
+- ⚙️ Three convenience presets
+- 🧵 Full thread safety
 
 ---
 
