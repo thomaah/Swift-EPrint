@@ -1,6 +1,6 @@
 # EPrint 🎯
 
-**Enhanced Print Debugging for Swift** (v1.2.1)
+**Enhanced Print Debugging for Swift** (v1.2.2)
 
 A lightweight, protocol-based print debugging library with emoji support, category filtering, configurable output, and zero overhead when disabled. Make your debug output beautiful, informative, and production-ready.
 
@@ -40,6 +40,13 @@ Traditional `print()` statements are great, but they have limitations:
 - ⚙️ **Configurable** - Three presets + full customization
 - 🌍 **Cross-Platform** - Works on iOS, macOS, watchOS, tvOS, and Linux
 - 📦 **No Dependencies** - Foundation only
+
+---
+
+## What's New in v1.2.2
+
+### v1.2.2
+- Fixed double category display in formatted output (standard and minimal configs).
 
 ---
 
@@ -134,7 +141,7 @@ private let eprint = EPrint(activeState: .overrideGlobal)
 Add EPrint to your `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/thomaah/EPrint.git", from: "1.2.0")
+    .package(url: "https://github.com/thomaah/EPrint.git", from: "1.2.2")
 ]
 ```
 
@@ -329,7 +336,7 @@ eprint(.measurement, "Width: \(width)")
 
 ## Category System 🏷️
 
-**New in v1.2.0**: Organize and filter debug output by category for powerful logging control across development, production, and support scenarios.
+**New in v1.2.0**: Organize and filter debug output by category (output formatting fixes in v1.2.2) for powerful logging control across development, production, and support scenarios.
 
 ### The Problem
 

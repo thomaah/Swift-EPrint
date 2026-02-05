@@ -161,13 +161,6 @@ public struct ConsoleOutput: EPrintOutput {
             components.append("[\(entry.threadName)]")
         }
         
-        // Category (NEW in v1.2.0)
-        if config.showCategory {
-            if let category = entry.category {
-                components.append("[\(category.name)]")
-            }
-        }
-        
         // Combine metadata components with the message
         if components.isEmpty {
             // No metadata - just the message
