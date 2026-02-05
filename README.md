@@ -1,6 +1,6 @@
 # EPrint 🎯
 
-**Enhanced Print Debugging for Swift** (v1.2.0)
+**Enhanced Print Debugging for Swift** (v1.2.1)
 
 A lightweight, protocol-based print debugging library with emoji support, category filtering, configurable output, and zero overhead when disabled. Make your debug output beautiful, informative, and production-ready.
 
