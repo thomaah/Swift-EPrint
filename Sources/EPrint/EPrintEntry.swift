@@ -82,6 +82,14 @@ public struct EPrintEntry: Sendable {
     /// Example: `"main"` or `"com.apple.root.default-qos"`
     public let thread: String
     
+    /// The category this print entry belongs to, if any
+    ///
+    /// Categories allow organizing and filtering debug output by topic or subsystem.
+    /// Uncategorized prints have `nil` here and bypass category filtering.
+    ///
+    /// Example: `.rendering`, `.network`, `.performance`
+    public let category: EPrintCategory?
+    
     // MARK: - Initialization
     
     /// Creates a new print entry with all metadata
@@ -96,13 +104,15 @@ public struct EPrintEntry: Sendable {
     ///   - function: Function name (from #function)
     ///   - timestamp: When the print occurred
     ///   - thread: Thread information
+    ///   - category: Optional category for filtering and organization
     public init(
         message: String,
         file: String,
         line: Int,
         function: String,
         timestamp: Date,
-        thread: String
+        thread: String,
+        category: EPrintCategory? = nil
     ) {
         self.message = message
         self.file = file
@@ -110,6 +120,7 @@ public struct EPrintEntry: Sendable {
         self.function = function
         self.timestamp = timestamp
         self.thread = thread
+        self.category = category
     }
     
     // MARK: - Convenience Properties
@@ -184,6 +195,7 @@ extension EPrintEntry: Equatable {
                lhs.line == rhs.line &&
                lhs.function == rhs.function &&
                lhs.timestamp == rhs.timestamp &&
-               lhs.thread == rhs.thread
+               lhs.thread == rhs.thread &&
+               lhs.category == rhs.category
     }
 }

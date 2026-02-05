@@ -99,6 +99,16 @@ public struct EPrintConfiguration: Sendable {
     /// Default: `false`
     public var showThread: Bool
     
+    /// Whether to show the category information.
+    ///
+    /// Displays the category tag for categorized prints.
+    /// Uncategorized prints show no category.
+    ///
+    /// Example: `[rendering]` or `[network]`
+    ///
+    /// Default: `false` (enabled in `.standard` and `.verbose` presets)
+    public var showCategory: Bool
+    
     // MARK: - Output Destinations
     
     /// The output destinations where entries will be written.
@@ -131,6 +141,7 @@ public struct EPrintConfiguration: Sendable {
     ///   - showFunction: Display function name (default: false)
     ///   - showTimestamp: Display timestamp (default: false)
     ///   - showThread: Display thread info (default: false)
+    ///   - showCategory: Display category (default: false)
     ///   - outputs: Output destinations (default: console only)
     ///
     /// ## Example
@@ -139,6 +150,7 @@ public struct EPrintConfiguration: Sendable {
     ///     enabled: true,
     ///     showFileName: true,
     ///     showLineNumber: true,
+    ///     showCategory: true,
     ///     outputs: [ConsoleOutput(), FileOutput(path: "debug.log")]
     /// )
     /// ```
@@ -149,6 +161,7 @@ public struct EPrintConfiguration: Sendable {
         showFunction: Bool = false,
         showTimestamp: Bool = false,
         showThread: Bool = false,
+        showCategory: Bool = false,
         outputs: [any EPrintOutput] = [ConsoleOutput()]
     ) {
         self.enabled = enabled
@@ -157,6 +170,7 @@ public struct EPrintConfiguration: Sendable {
         self.showFunction = showFunction
         self.showTimestamp = showTimestamp
         self.showThread = showThread
+        self.showCategory = showCategory
         self.outputs = outputs
     }
     
@@ -194,22 +208,23 @@ public struct EPrintConfiguration: Sendable {
     
     /// Standard configuration - file name and line number.
     ///
-    /// This is the most common debugging configuration. It shows where the print
-    /// came from without being too verbose. Perfect for tracking down issues.
+    /// This is the most common debugging configuration. Shows where the print
+    /// came from without being too verbose. Includes category information for
+    /// filtering and organization.
     ///
-    /// **Display**: File and line + message
+    /// **Display**: File, line, category (if present) + message
     ///
     /// ## Example Output
     /// ```
-    /// [PDFRenderer.swift:42] 🏁 Starting render
-    /// [PDFRenderer.swift:67] 📏 Width: 800, Height: 1200
-    /// [PDFRenderer.swift:89] ✅ Render complete
+    /// [PDFRenderer.swift:42] [rendering] 🏁 Starting render
+    /// [PDFRenderer.swift:67] [layout] 📏 Width: 800, Height: 1200
+    /// [PDFRenderer.swift:89] [performance] ⚡ Render took 45ms
     /// ```
     ///
     /// ## Usage
     /// ```swift
     /// let eprint = EPrint.standard
-    /// eprint("🏁 Starting render")
+    /// eprint("🏁 Starting render", category: .rendering)
     /// ```
     public static var standard: EPrintConfiguration {
         return EPrintConfiguration(
@@ -218,29 +233,30 @@ public struct EPrintConfiguration: Sendable {
             showLineNumber: true,
             showFunction: false,
             showTimestamp: false,
-            showThread: false
+            showThread: false,
+            showCategory: true
         )
     }
     
     /// Verbose configuration - all metadata enabled.
     ///
     /// Maximum information for deep debugging. Shows file, line, function, timestamp,
-    /// and thread. Useful for performance debugging, concurrency issues, or when you
-    /// need complete context.
+    /// thread, and category. Useful for performance debugging, concurrency issues, or
+    /// when you need complete context.
     ///
-    /// **Display**: File, line, function, timestamp, thread + message
+    /// **Display**: File, line, function, timestamp, thread, category + message
     ///
     /// ## Example Output
     /// ```
-    /// [PDFRenderer.swift:42] [render(page:at:zoom:)] [14:23:45.123] [main] 🏁 Starting render
-    /// [PDFRenderer.swift:67] [calculateSize(for:)] [14:23:45.125] [main] 📏 Width: 800, Height: 1200
-    /// [PDFRenderer.swift:89] [render(page:at:zoom:)] [14:23:45.456] [bg-qos] ✅ Render complete
+    /// [PDFRenderer.swift:42] [render(page:at:zoom:)] [14:23:45.123] [main] [rendering] 🏁 Starting render
+    /// [PDFRenderer.swift:67] [calculateSize(for:)] [14:23:45.125] [main] [layout] 📏 Width: 800, Height: 1200
+    /// [PDFRenderer.swift:89] [render(page:at:zoom:)] [14:23:45.456] [bg-qos] [performance] ⚡ Render took 45ms
     /// ```
     ///
     /// ## Usage
     /// ```swift
     /// let eprint = EPrint.verbose
-    /// eprint("🏁 Starting render")
+    /// eprint("🏁 Starting render", category: .rendering)
     /// ```
     public static var verbose: EPrintConfiguration {
         return EPrintConfiguration(
@@ -249,7 +265,8 @@ public struct EPrintConfiguration: Sendable {
             showLineNumber: true,
             showFunction: true,
             showTimestamp: true,
-            showThread: true
+            showThread: true,
+            showCategory: true
         )
     }
 }
@@ -268,6 +285,7 @@ extension EPrintConfiguration {
     /// let config = EPrintConfiguration.with(
     ///     fileName: true,
     ///     lineNumber: true,
+    ///     category: true,
     ///     timestamp: true
     /// )
     /// ```
@@ -278,6 +296,7 @@ extension EPrintConfiguration {
     ///   - function: Show function name
     ///   - timestamp: Show timestamp
     ///   - thread: Show thread info
+    ///   - category: Show category
     ///   - outputs: Output destinations
     /// - Returns: Configured instance
     public static func with(
@@ -286,6 +305,7 @@ extension EPrintConfiguration {
         function: Bool = false,
         timestamp: Bool = false,
         thread: Bool = false,
+        category: Bool = false,
         outputs: [any EPrintOutput] = [ConsoleOutput()]
     ) -> EPrintConfiguration {
         return EPrintConfiguration(
@@ -295,6 +315,7 @@ extension EPrintConfiguration {
             showFunction: function,
             showTimestamp: timestamp,
             showThread: thread,
+            showCategory: category,
             outputs: outputs
         )
     }
@@ -310,7 +331,7 @@ extension EPrintConfiguration: CustomStringConvertible {
     ///
     /// ## Example Output
     /// ```
-    /// EPrintConfiguration(enabled: true, displays: [fileName, lineNumber], outputs: 1)
+    /// EPrintConfiguration(enabled: true, displays: [fileName, lineNumber, category], outputs: 1)
     /// ```
     public var description: String {
         var displays: [String] = []
@@ -320,6 +341,7 @@ extension EPrintConfiguration: CustomStringConvertible {
         if showFunction { displays.append("function") }
         if showTimestamp { displays.append("timestamp") }
         if showThread { displays.append("thread") }
+        if showCategory { displays.append("category") }
         
         let displaysString = displays.isEmpty ? "none" : displays.joined(separator: ", ")
         
@@ -342,6 +364,7 @@ extension EPrintConfiguration: Equatable {
                lhs.showFunction == rhs.showFunction &&
                lhs.showTimestamp == rhs.showTimestamp &&
                lhs.showThread == rhs.showThread &&
+               lhs.showCategory == rhs.showCategory &&
                lhs.outputs.count == rhs.outputs.count
     }
 }

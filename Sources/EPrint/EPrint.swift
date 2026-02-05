@@ -185,6 +185,40 @@ public final class EPrint: @unchecked Sendable {
     /// Internal storage for global enabled state
     private static var _globalEnabled: Bool = true
     
+    /// Global category filter affecting all EPrint instances.
+    ///
+    /// Controls which categories are allowed to print globally. Instances with
+    /// `.overrideGlobal` active state can ignore this filter using their own
+    /// instance-level category filter.
+    ///
+    /// Default: `.allEnabled` (all categories print)
+    ///
+    /// ## Example
+    /// ```swift
+    /// // Production: Only show performance and network logs
+    /// EPrint.globalCategoryFilter = .only([.performance, .network])
+    ///
+    /// // Development: Show everything
+    /// EPrint.globalCategoryFilter = .allEnabled
+    ///
+    /// // Emergency: Disable all categorized output
+    /// EPrint.globalCategoryFilter = .allDisabled
+    /// ```
+    ///
+    /// ## Thread Safety
+    /// Access is synchronized via the static queue. Safe to read/write from any thread.
+    public static var globalCategoryFilter: CategoryFilter {
+        get {
+            globalQueue.sync { _globalCategoryFilter }
+        }
+        set {
+            globalQueue.sync { _globalCategoryFilter = newValue }
+        }
+    }
+    
+    /// Internal storage for global category filter
+    private static var _globalCategoryFilter: CategoryFilter = .allEnabled
+    
     /// Queue for thread-safe access to global state
     private static let globalQueue = DispatchQueue(
         label: "com.eprint.global",
@@ -215,6 +249,67 @@ public final class EPrint: @unchecked Sendable {
     /// ```
     public static func enableGlobally() {
         globalEnabled = true
+    }
+    
+    // MARK: - Global Category Control
+    
+    /// Enables only the specified categories globally.
+    ///
+    /// Creates a whitelist - only the listed categories will print.
+    /// All other categories are silenced.
+    ///
+    /// - Parameter categories: The categories to enable
+    ///
+    /// ## Example
+    /// ```swift
+    /// // Production: Only show critical logs
+    /// EPrint.enableCategories(.performance, .network)
+    /// ```
+    public static func enableCategories(_ categories: EPrintCategory...) {
+        globalCategoryFilter = .only(Set(categories))
+    }
+    
+    /// Disables the specified categories globally.
+    ///
+    /// Creates a blacklist - all categories print except the listed ones.
+    /// Perfect for silencing noisy categories.
+    ///
+    /// - Parameter categories: The categories to disable
+    ///
+    /// ## Example
+    /// ```swift
+    /// // Hide noisy rendering logs
+    /// EPrint.disableCategories(.rendering, .layout)
+    /// ```
+    public static func disableCategories(_ categories: EPrintCategory...) {
+        globalCategoryFilter = .except(Set(categories))
+    }
+    
+    /// Enables all categories globally.
+    ///
+    /// Resets the global category filter to allow all categories.
+    ///
+    /// ## Example
+    /// ```swift
+    /// EPrint.enableAllCategories()
+    /// // All categories now print
+    /// ```
+    public static func enableAllCategories() {
+        globalCategoryFilter = .allEnabled
+    }
+    
+    /// Disables all categories globally.
+    ///
+    /// Sets the global category filter to block all categorized output.
+    /// Note: Uncategorized prints will still print.
+    ///
+    /// ## Example
+    /// ```swift
+    /// EPrint.disableAllCategories()
+    /// // No categorized output will print
+    /// ```
+    public static func disableAllCategories() {
+        globalCategoryFilter = .allDisabled
     }
     
     // MARK: - Active State
@@ -290,6 +385,32 @@ public final class EPrint: @unchecked Sendable {
         }
     }
     
+    /// The category filter for this instance.
+    ///
+    /// Controls which categories are allowed to print from this specific instance.
+    /// When `activeState` is `.overrideGlobal`, this filter is used instead of
+    /// the global category filter.
+    ///
+    /// Default: `.allEnabled` (all categories print)
+    ///
+    /// ## Example
+    /// ```swift
+    /// // Instance-specific filtering
+    /// let debugLog = EPrint(activeState: .overrideGlobal)
+    /// debugLog.categoryFilter = .only([.debug, .performance])
+    ///
+    /// // Now only debug and performance categories print from this instance,
+    /// // regardless of global settings
+    /// ```
+    public var categoryFilter: CategoryFilter {
+        get {
+            queue.sync { _categoryFilter }
+        }
+        set {
+            queue.sync { _categoryFilter = newValue }
+        }
+    }
+    
     /// Convenience property for toggling output on/off.
     ///
     /// This provides a simple way to enable/disable without touching the full configuration.
@@ -318,6 +439,9 @@ public final class EPrint: @unchecked Sendable {
     
     /// Internal storage for configuration (thread-safe access via queue)
     private var _configuration: EPrintConfiguration
+    
+    /// Internal storage for instance category filter (thread-safe access via queue)
+    private var _categoryFilter: CategoryFilter
     
     /// Serial queue ensuring thread-safe access to configuration and writes
     ///
@@ -358,22 +482,28 @@ public final class EPrint: @unchecked Sendable {
     /// - Parameters:
     ///   - activeState: How this instance responds to global control (default: .enabled)
     ///   - configuration: The display configuration to use
+    ///   - categoryFilter: The category filter for this instance (default: .allEnabled)
     ///
     /// ## Example
     /// ```swift
     /// // Normal instance
     /// let eprint = EPrint(activeState: .enabled, configuration: .verbose)
     ///
-    /// // Always-on instance (prints warning)
-    /// let eprint = EPrint(activeState: .overrideGlobal, configuration: .standard)
-    /// // Output: ⚠️ EPrint: Using .overrideGlobal - ignoring global state
+    /// // Always-on instance with category filter
+    /// let eprint = EPrint(
+    ///     activeState: .overrideGlobal,
+    ///     configuration: .standard,
+    ///     categoryFilter: .only([.debug, .performance])
+    /// )
     /// ```
     public init(
         activeState: ActiveState = .enabled,
-        configuration: EPrintConfiguration = EPrintConfiguration()
+        configuration: EPrintConfiguration = EPrintConfiguration(),
+        categoryFilter: CategoryFilter = .allEnabled
     ) {
         self._activeState = activeState
         self._configuration = configuration
+        self._categoryFilter = categoryFilter
         self.queue = DispatchQueue(
             label: "com.eprint.queue.\(UUID().uuidString)",
             qos: .utility
@@ -434,6 +564,60 @@ public final class EPrint: @unchecked Sendable {
         )
     }
     
+    // MARK: - Instance Category Control
+    
+    /// Enables only the specified categories for this instance.
+    ///
+    /// Creates a whitelist - only the listed categories will print from this instance.
+    ///
+    /// - Parameter categories: The categories to enable
+    ///
+    /// ## Example
+    /// ```swift
+    /// let eprint = EPrint()
+    /// eprint.enableCategories(.debug, .performance)
+    /// ```
+    public func enableCategories(_ categories: EPrintCategory...) {
+        categoryFilter = .only(Set(categories))
+    }
+    
+    /// Disables the specified categories for this instance.
+    ///
+    /// Creates a blacklist - all categories print except the listed ones.
+    ///
+    /// - Parameter categories: The categories to disable
+    ///
+    /// ## Example
+    /// ```swift
+    /// let eprint = EPrint()
+    /// eprint.disableCategories(.rendering, .layout)
+    /// ```
+    public func disableCategories(_ categories: EPrintCategory...) {
+        categoryFilter = .except(Set(categories))
+    }
+    
+    /// Enables all categories for this instance.
+    ///
+    /// ## Example
+    /// ```swift
+    /// eprint.enableAllCategories()
+    /// ```
+    public func enableAllCategories() {
+        categoryFilter = .allEnabled
+    }
+    
+    /// Disables all categories for this instance.
+    ///
+    /// Note: Uncategorized prints will still print.
+    ///
+    /// ## Example
+    /// ```swift
+    /// eprint.disableAllCategories()
+    /// ```
+    public func disableAllCategories() {
+        categoryFilter = .allDisabled
+    }
+    
     // MARK: - Main Print Function
     
     // MARK: - Main Print Functions
@@ -446,19 +630,21 @@ public final class EPrint: @unchecked Sendable {
     /// - Parameters:
     ///   - emoji: A standard emoji (e.g., `.start`, `.success`, `.error`)
     ///   - message: The debug message to print
+    ///   - category: Optional category for filtering (default: nil)
     ///   - file: Source file (automatically captured via #file)
     ///   - line: Line number (automatically captured via #line)
     ///   - function: Function name (automatically captured via #function)
     ///
     /// ## Example
     /// ```swift
-    /// eprint(.start, "Beginning render")       // "🏁 Beginning render"
-    /// eprint(.measurement, "Width: \(width)")  // "📏 Width: 800"
-    /// eprint(.success, "Render complete")      // "✅ Render complete"
+    /// eprint(.start, "Beginning render", category: .rendering)
+    /// eprint(.measurement, "Width: \(width)", category: .layout)
+    /// eprint(.success, "Render complete", category: .performance)
     /// ```
     public func callAsFunction(
         _ emoji: Emoji.Standard,
         _ message: String,
+        category: EPrintCategory? = nil,
         file: String = #file,
         line: Int = #line,
         function: String = #function
@@ -467,7 +653,7 @@ public final class EPrint: @unchecked Sendable {
         let emojiMessage = "\(emoji.emoji) \(message)"
         
         // Call the main implementation
-        callAsFunction(emojiMessage, file: file, line: line, function: function)
+        callAsFunction(emojiMessage, category: category, file: file, line: line, function: function)
     }
     
     /// Prints a debug message with custom emoji prefix and captured metadata.
@@ -478,6 +664,7 @@ public final class EPrint: @unchecked Sendable {
     /// - Parameters:
     ///   - emoji: A custom emoji from your project's emoji enum
     ///   - message: The debug message to print
+    ///   - category: Optional category for filtering (default: nil)
     ///   - file: Source file (automatically captured via #file)
     ///   - line: Line number (automatically captured via #line)
     ///   - function: Function name (automatically captured via #function)
@@ -490,12 +677,13 @@ public final class EPrint: @unchecked Sendable {
     ///     var emoji: String { rawValue }
     /// }
     ///
-    /// eprint(MyEmojis.api, "Fetching data")        // "🌐 Fetching data"
-    /// eprint(MyEmojis.database, "Query complete")  // "💾 Query complete"
+    /// eprint(MyEmojis.api, "Fetching data", category: .network)
+    /// eprint(MyEmojis.database, "Query complete", category: .database)
     /// ```
     public func callAsFunction<E: EPrintEmoji>(
         _ emoji: E,
         _ message: String,
+        category: EPrintCategory? = nil,
         file: String = #file,
         line: Int = #line,
         function: String = #function
@@ -504,7 +692,7 @@ public final class EPrint: @unchecked Sendable {
         let emojiMessage = "\(emoji.emoji) \(message)"
         
         // Call the main implementation
-        callAsFunction(emojiMessage, file: file, line: line, function: function)
+        callAsFunction(emojiMessage, category: category, file: file, line: line, function: function)
     }
     
     /// Prints a debug message with captured metadata.
@@ -516,22 +704,24 @@ public final class EPrint: @unchecked Sendable {
     /// `eprint("message")` instead of `eprint.print("message")`.
     ///
     /// For better visual categorization, consider using the emoji overload:
-    /// `eprint(.start, "message")` instead of `eprint("🏁 message")`.
+    /// `eprint(.start, "message", category: .rendering)`.
     ///
     /// - Parameters:
     ///   - message: The debug message to print
+    ///   - category: Optional category for filtering (default: nil)
     ///   - file: Source file (automatically captured via #file)
     ///   - line: Line number (automatically captured via #line)
     ///   - function: Function name (automatically captured via #function)
     ///
     /// ## Example
     /// ```swift
-    /// eprint("🏁 Starting render")
-    /// eprint("📏 Width: \(width), Height: \(height)")
-    /// eprint("✅ Render complete")
+    /// eprint("🏁 Starting render", category: .rendering)
+    /// eprint("📏 Width: \(width), Height: \(height)", category: .layout)
+    /// eprint("✅ Render complete", category: .performance)
     /// ```
     public func callAsFunction(
         _ message: String,
+        category: EPrintCategory? = nil,
         file: String = #file,
         line: Int = #line,
         function: String = #function
@@ -539,6 +729,26 @@ public final class EPrint: @unchecked Sendable {
         // Early exit if disabled - this keeps overhead minimal
         // We check this before doing ANY work (even string interpolation happens after this check)
         guard shouldPrint else { return }
+        
+        // Check category filter
+        // Determine which filter to use based on activeState
+        let filterToUse: CategoryFilter
+        let state = queue.sync { _activeState }
+        
+        switch state {
+        case .overrideGlobal:
+            // Use instance filter when overriding global
+            filterToUse = queue.sync { _categoryFilter }
+        case .enabled:
+            // Use global filter when respecting global state
+            filterToUse = EPrint.globalCategoryFilter
+        case .disabled:
+            // Already handled by shouldPrint, but for clarity
+            return
+        }
+        
+        // Check if this category is allowed
+        guard filterToUse.allows(category) else { return }
         
         if EPrint.debugMode {
             print("🎯 EPrint.callAsFunction called", message)
@@ -559,7 +769,8 @@ public final class EPrint: @unchecked Sendable {
             line: line,
             function: function,
             timestamp: timestamp,
-            thread: thread
+            thread: thread,
+            category: category
         )
         
         // Write to all outputs (thread-safely)

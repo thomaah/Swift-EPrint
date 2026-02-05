@@ -1,8 +1,8 @@
 # EPrint 🎯
 
-**Enhanced Print Debugging for Swift** (v1.1.1)
+**Enhanced Print Debugging for Swift** (v1.2.0)
 
-A lightweight, protocol-based print debugging library with emoji support, configurable output, and zero overhead when disabled. Make your debug output beautiful, informative, and production-ready.
+A lightweight, protocol-based print debugging library with emoji support, category filtering, configurable output, and zero overhead when disabled. Make your debug output beautiful, informative, and production-ready.
 
 [![Swift Version](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%20|%20macOS%20|%20watchOS%20|%20tvOS%20|%20Linux-blue.svg)](https://swift.org)
@@ -27,10 +27,12 @@ Traditional `print()` statements are great, but they have limitations:
 ## Features ✨
 
 - 🎯 **Dead Simple** - Works just like `print()`, but better
+- 🏷️ **Category System** - Organize and filter by category (.rendering, .network, etc.) (v1.2.0)
+- 🎛️ **Flexible Filtering** - Whitelist or blacklist categories globally or per-instance (v1.2.0)
 - 🌐 **Global Control** - Disable all EPrint output with one line (v1.1.1)
 - 🔓 **Override System** - Keep specific files enabled even when globally disabled (v1.1.1)
 - 🔌 **Per-File Toggle** - Enable/disable debugging per file with one line
-- 📊 **Rich Metadata** - Optionally show file, line, function, timestamp, thread
+- 📊 **Rich Metadata** - Optionally show file, line, function, timestamp, thread, category
 - 🎨 **Emoji Support** - Use emojis to visually categorize your debug output
 - 🚀 **Zero Cost When Disabled** - Near-zero overhead when turned off
 - 🧵 **Thread Safe** - Safe to use from any thread
@@ -41,7 +43,47 @@ Traditional `print()` statements are great, but they have limitations:
 
 ---
 
-## What's New in v1.1.1 🎉
+## What's New in v1.2.0 🎉
+
+### Category System
+Organize and filter debug output by category for powerful logging control:
+
+```swift
+// Tag prints with categories
+eprint("Frame rendered", category: .rendering)
+eprint("API call complete", category: .network)
+eprint("Cache hit", category: .caching)
+
+// Filter globally
+EPrint.enableCategories(.performance, .network)  // Production
+EPrint.disableCategories(.rendering, .layout)     // Testing
+
+// Filter per instance
+let debugLog = EPrint()
+debugLog.categoryFilter = .only([.debug, .performance])
+```
+
+**Built-in categories**: `.rendering`, `.layout`, `.performance`, `.network`, `.database`, `.animation`, `.userInput`, `.log`, `.debug`
+
+**Create custom categories**:
+```swift
+extension EPrintCategory {
+    static let authentication = EPrintCategory("authentication")
+    static let caching = EPrintCategory("caching")
+}
+```
+
+**Perfect for**:
+- Different logging for development vs production
+- Focus on specific subsystems
+- Dynamic filtering for support scenarios
+- Searchable log files
+
+See the [Category System](#category-system-️) section for complete documentation.
+
+---
+
+## What's in v1.1.1
 
 ### Global Control System
 Control all EPrint output across your entire application with a single switch:
@@ -92,7 +134,7 @@ private let eprint = EPrint(activeState: .overrideGlobal)
 Add EPrint to your `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/thomaah/EPrint.git", from: "1.1.1")
+    .package(url: "https://github.com/thomaah/EPrint.git", from: "1.2.0")
 ]
 ```
 
@@ -285,6 +327,326 @@ eprint(.measurement, "Width: \(width)")
 
 ---
 
+## Category System 🏷️
+
+**New in v1.2.0**: Organize and filter debug output by category for powerful logging control across development, production, and support scenarios.
+
+### The Problem
+
+Debug output can quickly become overwhelming. You might need:
+- Different logging for **development** vs **production**
+- The ability to **focus on specific subsystems** (rendering, network, database)
+- **Dynamic filtering** for support scenarios (enable performance logs remotely)
+- **Search and filtering** through large log files
+
+The category system solves all of these.
+
+### Quick Start
+
+```swift
+private let eprint = EPrint.standard  // Shows categories by default
+
+// Tag prints with categories
+eprint("Starting render", category: .rendering)
+eprint("API request sent", category: .network)
+eprint("Layout calculated", category: .layout)
+```
+
+**Output:**
+```
+[PDFRenderer.swift:42] [rendering] Starting render
+[APIClient.swift:89] [network] API request sent
+[LayoutEngine.swift:156] [layout] Layout calculated
+```
+
+### Built-in Categories
+
+EPrint provides common categories out of the box:
+
+| Category | Purpose | Example Usage |
+|----------|---------|---------------|
+| `.rendering` | Visual rendering operations | Frame updates, drawing |
+| `.layout` | Layout calculations | Constraint solving, sizing |
+| `.performance` | Performance metrics | Timing, profiling |
+| `.network` | Network operations | API calls, requests |
+| `.database` | Database operations | Queries, transactions |
+| `.animation` | Animation state | State transitions, motion |
+| `.userInput` | User interactions | Taps, gestures |
+| `.log` | General logging | Default category |
+| `.debug` | Debug information | Development-only |
+
+### Creating Custom Categories
+
+Extend `EPrintCategory` to add your app-specific categories:
+
+```swift
+import EPrint
+
+extension EPrintCategory {
+    static let authentication = EPrintCategory("authentication")
+    static let caching = EPrintCategory("caching")
+    static let analytics = EPrintCategory("analytics")
+    static let payment = EPrintCategory("payment")
+}
+
+// Use like built-in categories
+eprint("User logged in", category: .authentication)
+eprint("Cache hit", category: .caching)
+```
+
+### Filtering Categories
+
+Control which categories print using powerful filtering options:
+
+#### Global Filtering
+
+Affects all EPrint instances (except those with `.overrideGlobal`):
+
+```swift
+// Development: See everything
+EPrint.globalCategoryFilter = .allEnabled
+
+// Production: Only critical categories
+EPrint.enableCategories(.performance, .network)
+// Equivalent to:
+EPrint.globalCategoryFilter = .only([.performance, .network])
+
+// Testing: Hide noisy categories
+EPrint.disableCategories(.rendering, .layout)
+// Equivalent to:
+EPrint.globalCategoryFilter = .except([.rendering, .layout])
+
+// Emergency: Disable all categorized output
+EPrint.disableAllCategories()
+```
+
+#### Instance Filtering
+
+Each instance can have its own filter:
+
+```swift
+let renderLog = EPrint.standard
+renderLog.categoryFilter = .only([.rendering, .performance])
+renderLog("Starting render", category: .rendering)  // ✅ Prints
+renderLog("API call", category: .network)           // ❌ Silent
+
+// Use with .overrideGlobal to ignore global filter
+let debugLog = EPrint(activeState: .overrideGlobal)
+debugLog.categoryFilter = .only([.debug])
+// Now prints ONLY .debug category, regardless of global settings
+```
+
+### Filter Strategies
+
+Four filtering strategies cover all use cases:
+
+| Filter | Behavior | Use Case |
+|--------|----------|----------|
+| `.allEnabled` | All categories print | Development (default) |
+| `.allDisabled` | No categories print | Emergency shutdown |
+| `.only([...])` | Whitelist specific categories | Production logging |
+| `.except([...])` | Blacklist specific categories | Hide noisy output |
+
+**Important**: Uncategorized prints (no `category:` parameter) always bypass category filters. This ensures critical messages always print.
+
+### Real-World Workflows
+
+#### Development Environment
+```swift
+#if DEBUG
+EPrint.globalCategoryFilter = .allEnabled  // See everything
+#endif
+
+eprint("Frame rendered", category: .rendering)
+eprint("API call complete", category: .network)
+// Both print in development
+```
+
+#### Production Environment
+```swift
+#if RELEASE
+EPrint.enableCategories(.performance, .network)  // Only critical logs
+#endif
+
+eprint("Frame rendered", category: .rendering)      // ❌ Silent
+eprint("API took 450ms", category: .performance)    // ✅ Prints
+eprint("Network error", category: .network)         // ✅ Prints
+```
+
+#### Support/Debugging Mode
+```swift
+// User reports performance issue
+// Enable performance logging remotely:
+func enablePerformanceDebugging() {
+    EPrint.enableCategories(.performance, .layout, .rendering)
+}
+
+// Or create dedicated support logger
+let supportLog = EPrint(
+    activeState: .overrideGlobal,
+    configuration: .verbose
+)
+supportLog.categoryFilter = .only([.performance, .network])
+```
+
+#### Testing - Hide Noisy Output
+```swift
+// In test setup
+override func setUp() {
+    super.setUp()
+    // Hide rendering logs during tests
+    EPrint.disableCategories(.rendering, .animation)
+}
+```
+
+### Category Display
+
+Categories appear in output when `showCategory` is enabled:
+
+```swift
+// Minimal config - no category display
+let eprint = EPrint.minimal
+eprint("Message", category: .rendering)
+// Output: Message
+
+// Standard config - shows categories (default)
+let eprint = EPrint.standard
+eprint("Message", category: .rendering)
+// Output: [File.swift:42] [rendering] Message
+
+// Verbose config - shows everything including category
+let eprint = EPrint.verbose
+eprint("Message", category: .rendering)
+// Output: [File.swift:42] [function()] [14:23:45.123] [main] [rendering] Message
+
+// Custom - disable category display
+let eprint = EPrint(configuration: .with(
+    fileName: true,
+    lineNumber: true,
+    category: false  // Disable category display
+))
+```
+
+### Searching and Filtering Logs
+
+Categories make log files searchable:
+
+```bash
+# Search for all performance logs
+grep "\[performance\]" debug.log
+
+# Search for network issues
+grep "\[network\]" debug.log | grep -i error
+
+# Count rendering operations
+grep -c "\[rendering\]" debug.log
+
+# Multiple categories
+grep -E "\[performance\]|\[network\]" debug.log
+```
+
+### Best Practices
+
+1. **Use Categories Consistently**: Pick standard categories for your team
+   ```swift
+   extension EPrintCategory {
+       static let api = EPrintCategory("api")
+       static let db = EPrintCategory("db")
+   }
+   ```
+
+2. **Tag Critical Logs**: Always categorize important output
+   ```swift
+   // ✅ Good - categorized
+   eprint("Payment processed", category: .payment)
+   
+   // ⚠️ Less useful - uncategorized (but still works)
+   eprint("Payment processed")
+   ```
+
+3. **Use Uncategorized for Must-Print**: Skip category for output that should always print
+   ```swift
+   // No category = bypasses all filters
+   eprint(.error, "Critical: Database connection lost")
+   ```
+
+4. **Environment-Specific Filters**: Different filters for different builds
+   ```swift
+   #if DEBUG
+   EPrint.globalCategoryFilter = .allEnabled
+   #elseif RELEASE
+   EPrint.enableCategories(.performance, .network)
+   #endif
+   ```
+
+5. **Document Your Categories**: Help your team understand what to use
+   ```swift
+   extension EPrintCategory {
+       /// Backend API communication
+       static let api = EPrintCategory("api")
+       
+       /// Local database operations
+       static let database = EPrintCategory("database")
+       
+       /// User analytics events
+       static let analytics = EPrintCategory("analytics")
+   }
+   ```
+
+### Complete Example
+
+```swift
+import EPrint
+
+// Define app categories
+extension EPrintCategory {
+    static let api = EPrintCategory("api")
+    static let cache = EPrintCategory("cache")
+    static let auth = EPrintCategory("auth")
+}
+
+// Production config
+#if RELEASE
+EPrint.enableCategories(.api, .auth, .performance)
+#endif
+
+class APIClient {
+    private let eprint = EPrint.standard
+    
+    func fetchUser(_ id: String) {
+        eprint(.start, "Fetching user", category: .api)
+        
+        // Check cache first
+        if let cached = cache.get(id) {
+            eprint(.success, "Cache hit", category: .cache)  // Hidden in production
+            return cached
+        }
+        
+        let start = Date()
+        makeNetworkRequest(id) { result in
+            let duration = Date().timeIntervalSince(start)
+            
+            switch result {
+            case .success(let user):
+                eprint(.success, "User fetched", category: .api)  // Prints in production
+                eprint(.metrics, "Request took \(duration)ms", category: .performance)  // Prints in production
+            case .failure(let error):
+                eprint(.error, "Fetch failed: \(error)", category: .api)  // Prints in production
+            }
+        }
+    }
+}
+```
+
+**Production Output** (only `.api`, `.auth`, `.performance` categories):
+```
+[APIClient.swift:12] [api] 🏁 Fetching user
+[APIClient.swift:26] [api] ✅ User fetched  
+[APIClient.swift:27] [performance] 📊 Request took 234ms
+```
+
+---
+
 ## Usage Guide 📖
 
 ### Three Convenience Presets
@@ -302,26 +664,26 @@ eprint(.start, "Starting render")
 🏁 Starting render
 ```
 
-#### 2. Standard - File and Line
+#### 2. Standard - File, Line, and Category
 ```swift
 private let eprint = EPrint.standard
-eprint(.start, "Starting render")
+eprint(.start, "Starting render", category: .rendering)
 ```
 
 **Output:**
 ```
-[PDFRenderer.swift:42] 🏁 Starting render
+[PDFRenderer.swift:42] [rendering] 🏁 Starting render
 ```
 
 #### 3. Verbose - Everything
 ```swift
 private let eprint = EPrint.verbose
-eprint(.start, "Starting render")
+eprint(.start, "Starting render", category: .rendering)
 ```
 
 **Output:**
 ```
-[PDFRenderer.swift:42] [render(page:)] [14:23:45.123] [main] 🏁 Starting render
+[PDFRenderer.swift:42] [render(page:)] [14:23:45.123] [main] [rendering] 🏁 Starting render
 ```
 
 ### Custom Configuration
