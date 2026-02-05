@@ -62,7 +62,7 @@ public protocol EPrintOutput: Sendable {
 /// ## Display Format
 /// The output format is built dynamically based on configuration:
 /// - If nothing is enabled: just the message
-/// - If options are enabled: `[file:line] [function] [timestamp] [thread] message`
+/// - If options are enabled: `[file:line] [function] [timestamp] [thread] [category] message`
 ///
 /// ## Example Output
 /// ```
@@ -72,8 +72,8 @@ public protocol EPrintOutput: Sendable {
 /// // With file and line:
 /// [PDFRenderer.swift:42] 🏁 Starting render
 ///
-/// // Full verbose:
-/// [PDFRenderer.swift:42] [render(page:)] [14:23:45.123] [main] 🏁 Starting render
+/// // Full verbose with category:
+/// [PDFRenderer.swift:42] [render(page:)] [14:23:45.123] [main] [rendering] 🏁 Starting render
 /// ```
 ///
 /// ## Thread Safety
@@ -135,6 +135,13 @@ public struct ConsoleOutput: EPrintOutput {
             
             components.append("[\(fileInfo)]")
         }
+
+         // Category (NEW in v1.2.0)
+        if config.showCategory {
+            if let category = entry.category {
+                components.append("[\(category.name)]")
+            }
+        }
         
         // Function name
         if config.showFunction {
@@ -152,6 +159,13 @@ public struct ConsoleOutput: EPrintOutput {
         // Thread
         if config.showThread {
             components.append("[\(entry.threadName)]")
+        }
+        
+        // Category (NEW in v1.2.0)
+        if config.showCategory {
+            if let category = entry.category {
+                components.append("[\(category.name)]")
+            }
         }
         
         // Combine metadata components with the message
